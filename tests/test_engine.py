@@ -219,10 +219,13 @@ class EngineTest(unittest.TestCase):
         try:
             eng.start_watching()
             self.assertIn("cb", captured, "未配置 PCL 目录时应启动进程监控")
-            captured["cb"]("/some/where/Plain Craft Launcher 2.exe")
+            exe = "/some/where/Plain Craft Launcher 2.exe"
+            captured["cb"](exe)
             ev = wait_for(self.events, lambda e: e["type"] == "pcl_detected")
             self.assertIsNotNone(ev)
-            self.assertEqual(ev["dir"], "/some/where")
+            # 与引擎相同的路径归一化方式（Windows 上 abspath 会补盘符）
+            self.assertEqual(ev["dir"],
+                             os.path.dirname(os.path.abspath(exe)))
         finally:
             w.PclProcessWatcher = orig
             eng.stop()
