@@ -10,6 +10,18 @@
 
 ---
 
+## 📥 下载（Windows 单文件版）
+
+最新版 exe 由 GitHub Actions 在 Windows 环境自动打包发布（附 SHA256 校验文件）：
+
+- **下载页**：<https://github.com/Hy210220/TotemFix/releases/latest>
+- **直接下载**：<https://github.com/Hy210220/TotemFix/releases/latest/download/TotemFix.exe>
+
+> 源码仓库：<https://github.com/Hy210220/TotemFix>
+> 浏览器/杀软若提示“未知发布者”，属正常现象（未做代码签名），添加信任即可。
+
+---
+
 ## ✨ 功能特性
 
 | 功能 | 说明 |
@@ -32,9 +44,10 @@
 
 ### 第 1 步：拿到 exe
 
-两种方式任选其一：
+三种方式任选其一：
 
-- **自己打包（推荐）**：在 Windows 上装好 Python 3.8+ 后，双击项目里的 `scripts\build.bat`，
+- **直接从 GitHub 下载（推荐）**：<https://github.com/Hy210220/TotemFix/releases/latest> 下载 `TotemFix.exe`（官方 Actions 自动打包，附 SHA256 校验）；
+- **自己打包**：在 Windows 上装好 Python 3.8+ 后，双击项目里的 `scripts\build.bat`，
   完成后得到 `dist\TotemFix.exe`；
 - **源码运行**：装有 Python 3.8+ 时双击 `启动助手.bat` 直接跑源码（无黑色窗口）。
 
