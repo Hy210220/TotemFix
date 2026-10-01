@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
-"""后台文件监控器（轮询实现，零依赖）。
+"""后台监控器（轮询实现，零依赖）。
 
-监控 PCL 日志、游戏日志、崩溃报告目录、JVM 崩溃日志。
-文件新增/修改/大小变化 → 触发 on_change（已内置去抖，写入期间不会反复触发）。
+  * Watcher：监控 PCL 日志、游戏日志、崩溃报告目录、JVM 崩溃日志，
+    文件新增/修改/大小变化 → 触发 on_change（内置去抖）。
+  * PclProcessWatcher：监控 PCL2 进程/窗口，一旦检测到用户打开了
+    PCL2 即回调其 exe 路径（用于自动定位 PCL 文件夹）。
 """
 
 import os
 import threading
 import time
+
+from . import config
 
 
 class Watcher(threading.Thread):
@@ -89,6 +93,41 @@ class Watcher(threading.Thread):
                         self.on_change()
                     except Exception:
                         pass
+
+    def stop(self):
+        self._stop.set()
+
+
+class PclProcessWatcher(threading.Thread):
+    """监控 PCL2 进程：一旦检测到运行中的 PCL2，回调其 exe 路径并停止。
+
+    detector 可注入（测试用）；默认使用 config.detect_pcl_process。
+    """
+
+    def __init__(self, cfg: dict, on_found, interval: float = 6.0,
+                 detector=None):
+        super().__init__(daemon=True, name="pcl-watcher")
+        self.cfg = cfg
+        self.on_found = on_found
+        self.interval = float(interval)
+        self.detector = detector or config.detect_pcl_process
+        self._stop = threading.Event()
+
+    def run(self):
+        while not self._stop.is_set():
+            self._stop.wait(self.interval)
+            if self._stop.is_set():
+                return
+            try:
+                exe = self.detector()
+            except Exception:
+                continue
+            if exe and os.path.isfile(exe):
+                try:
+                    self.on_found(exe)
+                except Exception:
+                    pass
+                return  # 已定位，使命完成
 
     def stop(self):
         self._stop.set()

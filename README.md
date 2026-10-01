@@ -27,6 +27,8 @@
 | 功能 | 说明 |
 | --- | --- |
 | 🚀 单文件免安装 | 一个 `TotemFix.exe` 放进 PCL 文件夹，双击即用，数据自动存到 exe 旁的 `data/` 目录 |
+| 🎯 PCL2 自动定位 | 兼容真实 exe 名（`Plain Craft Launcher 2.exe` 等）；**检测到你打开 PCL2 时自动识别运行窗口并定位其文件夹** |
+| 📂 多 .minecraft 检测 | 优先读取 PCL 日志与 **PCL 设置中的游戏文件夹**（Setup.ini + 注册表 LaunchFolders），还可**全盘扫描列出所有 .minecraft 附路径供你选择** |
 | 🔍 启动自动扫描 | 打开即扫描 PCL 日志（Log1/Log2）、游戏日志 latest.log、崩溃报告 crash-reports、JVM 崩溃日志，并支持版本隔离目录 |
 | 👀 后台常驻监控 | 每 3 秒（可调）轮询日志变化；**出现新报错自动弹出窗口**并置顶提醒 |
 | 🤖 自动 AI 分析 | 报错后自动调 DeepSeek：一句话总结、根本原因、**出错文件位置**、解决办法步骤、置信度；同一报错不重复触发 |
@@ -35,6 +37,7 @@
 | 💾 自动备份与还原 | 任何修改前自动备份到 `.minecraft/errordoctor-backups/`，历史与备份页一键还原 |
 | 🧱 路径沙箱 | AI 只能操作 `.minecraft` 内相对路径：拒绝盘符、绝对路径、`..` 越界、符号链接、非空目录删除、10MB 以上文件改写 |
 | 💬 内嵌 AI 问答 | 软件内对话窗口，可粘贴日志提问或咨询故障排查（与自动修复互不影响） |
+| 🖥️ PCL2 风格界面 | 蓝白简约配色，分区清晰：顶栏 / 问题列表 / 详情·问答·历史三个页签 / 状态栏 |
 | 🕘 操作历史 | 扫描/分析/修复/还原全部留痕 |
 | 🏠 PCL2 主页一键入口（可选） | 附带自定义主页 XAML，在 PCL2 首页放一个按钮直接拉起 exe |
 
@@ -53,10 +56,11 @@
 
 ### 第 2 步：放进 PCL 文件夹
 
-把 `TotemFix.exe` 复制到 **PCL 文件夹**（与 `PCL.exe` 同级的那个文件夹），双击打开。
+把 `TotemFix.exe` 复制到 **PCL 文件夹**（与 `PCL.exe` / `Plain Craft Launcher 2.exe` 同级的那个文件夹），双击打开。
 
-- 程序会自动把「PCL 文件夹」识别为 exe 所在目录；
-- 自动检测 `.minecraft` 位置（读 PCL 日志 → Setup.ini → 系统默认路径），检测不到时首次启动会引导你手动填写。
+- 程序会自动把「PCL 文件夹」识别为 exe 所在目录；若 exe 放在别处，**打开 PCL2 软件后 TotemFix 会自动识别其运行窗口并定位文件夹**；
+- 自动检测 `.minecraft`：优先读 PCL 日志与 **PCL 设置里的游戏文件夹**（Setup.ini + 注册表列表），
+  有多个 .minecraft 时可在设置里**点“全盘扫描”列出全部文件夹（附完整路径）自己选一个**。
 
 ### 第 3 步：配置 DeepSeek 并开始使用
 
@@ -147,13 +151,13 @@
 ## 🧪 开发者
 
 ```bash
-python3 -m unittest discover -s tests -v    # 32 个单元/集成测试
+python3 -m unittest discover -s tests -v    # 45 个单元/集成测试
 xvfb-run -a python3 tests/smoke_gui.py      # GUI 全流程冒烟测试（Linux + Xvfb）
 xvfb-run -a -s "-screen 0 1280x800x24" python3 tests/shot_gui.py   # 重新生成界面截图
 python3 -m errordoctor                      # 源码运行（--autofix / --no-ask / --hidden）
 ```
 
-测试覆盖：扫描器（GBK 编码、版本隔离、签名去重）、DeepSeek 客户端（mock：围栏 JSON/401/402/429/坏 JSON/对话）、
+测试覆盖：扫描器（GBK 编码、版本隔离、签名去重）、配置检测（PCL exe 名兼容、Setup.ini/注册表解析、多 .minecraft 优先级、全盘扫描剪枝、进程窗口检测）、DeepSeek 客户端（mock：围栏 JSON/401/402/429/坏 JSON/对话）、
 修复执行器（备份/还原/路径穿越拒绝）、文件监控器（去抖）、自动流程引擎（新报错识别→分析→修复→去重）、
 GUI 全自动流程（启动扫描→弹窗确认→“不再询问”→全自动→问答→设置）。
 
@@ -189,6 +193,14 @@ TotemFix/
 
 **Q：双击 exe 没反应？**
 首次启动会做一次自动扫描，若 DeepSeek 未配置会弹引导窗。检查 exe 是否被杀毒软件拦截（PyInstaller 打包的程序偶有误报，添加信任即可）。
+
+**Q：识别不到 PCL 文件夹？**
+TotemFix 兼容多种 exe 名（`PCL.exe`、`Plain Craft Launcher 2.exe` 等）与仅有日志的便携版。
+仍识别不到时，**打开 PCL2 软件**——TotemFix 会自动识别其运行窗口并定位文件夹；也可在设置里手动填写。
+
+**Q：电脑里有多个 .minecraft，怎么选？**
+设置 → Minecraft 文件夹区域点“🔎 从 PCL 配置检测”（优先读取你在 PCL 里设置的游戏文件夹），
+或点“💾 全盘扫描所有 .minecraft”，全部候选会**带完整路径**列在列表里，双击即可选用。
 
 **Q：同一报错会反复弹窗吗？**
 不会。报错签名做了时间戳归一化，同一报错只触发一次；修复后自动重扫验证，日志里残留的旧报错不会重复触发。

@@ -9,7 +9,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from errordoctor import config, engine as engine_mod, gui  # noqa: E402
+from errordoctor import config, engine as engine_mod, gui, history  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="ed-gui-")
 PCL = os.path.join(TMP, "PCL")
@@ -132,14 +132,33 @@ app._send_chat()
 check("AI 问答回复", wait_cond(
     lambda: "模拟回复：怎么装光影？" in app.chat_text.get("1.0", "end"), app, 6))
 
-print("== 场景 4：设置弹窗与保存 ==")
+print("== 场景 4：设置弹窗、候选 .minecraft 列表与保存 ==")
 app._open_settings()
 pump(app, 0.5)
 check("设置窗口打开", app.settings_win is not None and app.settings_win.winfo_exists())
 if app.settings_win:
+    # 候选列表：填充两个 .minecraft 后应显示且可选
+    mc2 = os.path.join(TMP, "第二处", ".minecraft")
+    os.makedirs(mc2, exist_ok=True)
+    app._fill_mc_list([MC, mc2])
+    check("候选列表渲染", app.mc_listbox.size() == 2)
+    app.mc_listbox.selection_set(1)
+    app._use_mc_candidate()
+    check("使用所选填入输入框", app.sv["mc"].get() == mc2)
+    app.sv["mc"].delete(0, "end")
+    app.sv["mc"].insert(0, MC)
     app.sv["key"].insert(0, "sk-newkey123")
     app._save_settings()
 check("设置已保存", cfg["api_key"] == "sk-newkey123")
+
+print("== 场景 4.5：检测到 PCL2 启动 → 自动定位并扫描 ==")
+cfg["pcl_dir"] = ""          # 模拟尚未定位
+app.q.put({"type": "pcl_detected", "dir": PCL})
+check("PCL2 进程自动定位", wait_cond(
+    lambda: cfg.get("pcl_dir") == PCL, app, 4))
+check("自动定位后记录历史", wait_cond(
+    lambda: any("检测到 PCL2" in h["summary"] for h in history.list_records(10)),
+    app, 4))
 
 print("== 场景 5：历史与备份页 ==")
 app._select_tab(2)

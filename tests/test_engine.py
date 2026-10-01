@@ -198,6 +198,62 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(ev["result"]["ok"], 0)
         self.assertIn("非法", ev["result"]["results"][0]["message"])
 
+    def test_pcl_process_detected(self):
+        """PCL 文件夹未定位时，监控到 PCL2 进程 → 触发 pcl_detected 事件。"""
+        captured = {}
+
+        class FakePclWatcher:
+            def __init__(self, cfg, on_found, interval=6.0, detector=None):
+                captured["cb"] = on_found
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+        w = engine_mod.watcher
+        orig = w.PclProcessWatcher
+        w.PclProcessWatcher = FakePclWatcher
+        eng = engine_mod.Engine({"pcl_dir": ""}, on_event=self._on_event)
+        try:
+            eng.start_watching()
+            self.assertIn("cb", captured, "未配置 PCL 目录时应启动进程监控")
+            captured["cb"]("/some/where/Plain Craft Launcher 2.exe")
+            ev = wait_for(self.events, lambda e: e["type"] == "pcl_detected")
+            self.assertIsNotNone(ev)
+            self.assertEqual(ev["dir"], "/some/where")
+        finally:
+            w.PclProcessWatcher = orig
+            eng.stop()
+
+    def test_no_pcl_watcher_when_dir_known(self):
+        """已识别 PCL 目录时不应再启动进程监控。"""
+        with open(os.path.join(self.pcl, "Log1.txt"), "w", encoding="utf-8") as f:
+            f.write("x\n")
+        w = engine_mod.watcher
+        orig = w.PclProcessWatcher
+        started = []
+
+        class FakePclWatcher:
+            def __init__(self, cfg, on_found, interval=6.0, detector=None):
+                started.append(1)
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+        w.PclProcessWatcher = FakePclWatcher
+        eng = engine_mod.Engine(dict(self.cfg), on_event=self._on_event)
+        try:
+            eng.start_watching()
+            self.assertEqual(started, [], "PCL 目录已识别，不应启动进程监控")
+        finally:
+            w.PclProcessWatcher = orig
+            eng.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

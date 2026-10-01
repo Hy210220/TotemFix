@@ -2,9 +2,10 @@
 """自动流程引擎：扫描 → 差异检测 → AI 分析 → 修复执行，全部在后台线程完成，
 通过事件回调把结果交给 GUI（GUI 用队列/after 消费事件，保持界面不卡顿）。"""
 
+import os
 import threading
 
-from . import deepseek, fixer, scanner, watcher
+from . import config, deepseek, fixer, scanner, watcher
 
 
 def _default_client_factory(cfg: dict):
@@ -27,6 +28,7 @@ class Engine:
         self._scan_lock = threading.Lock()
         self._running = True
         self.watcher = None
+        self.pcl_watcher = None
 
     # ------------------------------------------------------------ 事件
 
@@ -42,14 +44,26 @@ class Engine:
         if self.watcher is None and self._running:
             self.watcher = watcher.Watcher(self.cfg, self._on_fs_change)
             self.watcher.start()
+        # PCL 文件夹尚未定位时，启动 PCL2 进程监控：用户打开 PCL2 后自动定位
+        if self.pcl_watcher is None and self._running \
+                and not config._is_pcl_dir(self.cfg.get("pcl_dir", "")):
+            self.pcl_watcher = watcher.PclProcessWatcher(
+                self.cfg, self._on_pcl_found)
+            self.pcl_watcher.start()
 
     def stop(self):
         self._running = False
         if self.watcher:
             self.watcher.stop()
+        if self.pcl_watcher:
+            self.pcl_watcher.stop()
 
     def _on_fs_change(self):
         self._emit({"type": "fs_change"})
+
+    def _on_pcl_found(self, exe_path: str):
+        self._emit({"type": "pcl_detected",
+                    "dir": os.path.dirname(os.path.abspath(exe_path))})
 
     # ------------------------------------------------------------ 扫描
 
