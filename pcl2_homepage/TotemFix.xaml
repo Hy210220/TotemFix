@@ -1,0 +1,34 @@
+﻿<!--
+  ════════════════════════════════════════════════════════════════
+  TotemFix —— PCL2 自定义主页插件（可选）
+  ════════════════════════════════════════════════════════════════
+  TotemFix 为单文件桌面版：只需把 TotemFix.exe 放进 PCL 文件夹双击即可，
+  本主页卡片只是提供一个“从 PCL2 首页一键打开”的入口，非必需。
+
+  安装方法：
+  PCL2 → 设置 → 个性化 → 主页 → 选择本文件；或把本文件 <local:MyCard>
+  到 </local:MyCard> 之间的内容复制进你现有主页 xaml 的末尾。
+
+  前提：TotemFix.exe 位于 <PCL 文件夹> 内（与 PCL.exe 同级），
+  按钮使用 {path} 替换标记自动定位，随 PCL 文件夹移动也有效。
+  ════════════════════════════════════════════════════════════════
+-->
+
+<local:MyCard Title="🧿 TotemFix" Margin="0,0,0,15" CanSwap="True" IsSwapped="False">
+    <StackPanel Margin="25,25,23,15">
+        <TextBlock Margin="0,0,0,6" TextWrapping="Wrap"
+                   Text="外接 DeepSeek 的全自动报错检测与修复：把 TotemFix.exe 放进 PCL 文件夹后常驻监控，出现新报错自动弹出分析窗口，AI 定位出错文件并给出解决办法，可按设置自动修复（自动备份、可还原）。" />
+        <local:MyHint Theme="Blue"
+                     Text="首次使用：打开工具后在“设置”中填写 DeepSeek API Key，并自动检测 .minecraft 路径。&#xA;注：AI 分析需联网并消耗 DeepSeek API 额度。" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+            <local:MyButton Margin="0,0,10,0" Height="38" HorizontalAlignment="Left" Padding="18,0,18,0" ColorType="Highlight"
+                            Text="🔍 打开 TotemFix" EventType="执行命令" EventData="{path}TotemFix.exe"
+                            ToolTip="打开报错检测与自动修复工具（首次会启动自动扫描）" />
+            <local:MyButton Margin="0,0,10,0" Height="38" HorizontalAlignment="Left" Padding="18,0,18,0"
+                            Text="🤖 全自动模式启动" EventType="执行命令" EventData="{path}TotemFix.exe|--autofix"
+                            ToolTip="以自动修复模式启动" />
+        </StackPanel>
+        <TextBlock Margin="0,10,0,0" FontSize="11" Foreground="#FF8C8C8C"
+                   Text="如按钮无效：请确认 TotemFix.exe 与 PCL.exe 位于同一文件夹。" />
+    </StackPanel>
+</local:MyCard>
