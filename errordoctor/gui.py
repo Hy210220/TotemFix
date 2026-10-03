@@ -142,7 +142,6 @@ class App:
         self._started = time.time()
 
         self._build_root()
-        self._build_toolbar()
         self._build_body()
         self._build_statusbar()
 
@@ -195,19 +194,12 @@ class App:
             ToolTip(b, tip)
         return b
 
-    # ================================================================ 顶栏
+    # ================================================================ 顶栏（内容区工具栏）
 
     def _build_toolbar(self):
-        bar = tk.Frame(self.root, bg=BG)
+        bar = tk.Frame(self.content, bg=BG)
         bar.pack(side="top", fill="x")
         tk.Frame(bar, bg=BORDER, height=1).pack(side="bottom", fill="x")
-
-        logo = tk.Frame(bar, bg=BG)
-        logo.pack(side="left", padx=16, pady=9)
-        tk.Label(logo, text="🧿 TotemFix", bg=BG, fg=ACCENT,
-                 font=FONT_LOGO).pack(anchor="w")
-        tk.Label(logo, text="PCL2 报错检测 · DeepSeek 自动修复",
-                 bg=BG, fg=DIM, font=FONT_S).pack(anchor="w")
 
         self.btn_scan = self._make_button(bar, "🔍 立即扫描", self._on_scan_click,
                                           primary=True, big=True,
@@ -223,20 +215,18 @@ class App:
         cb.pack(side="left", padx=6)
         ToolTip(cb, "检测到报错后自动分析并执行修复（默认弹窗确认）")
 
-        self.watch_label = tk.Label(bar, text="", bg=BG, fg=DIM, font=FONT_S)
-        self.watch_label.pack(side="left", padx=10)
+        # 状态点（OpenFrp 风格：● 绿=监控中 / 黄=等待 PCL2）
+        self.status_dot = tk.Canvas(bar, width=16, height=16, bg=BG,
+                                    highlightthickness=0, bd=0)
+        self.status_dot.pack(side="left", padx=(12, 4))
+        self._dot_id = self.status_dot.create_oval(3, 3, 13, 13, fill=YELLOW,
+                                                   outline="")
 
-        self.btn_settings = self._make_button(bar, "⚙️ 设置", self._open_settings,
-                                              tip="路径检测、DeepSeek 密钥与行为设置")
-        self.btn_settings.pack(side="right", padx=(4, 16), pady=10)
-        self.btn_chat = self._make_button(bar, "💬 AI 问答",
-                                          lambda: self._select_tab(1),
-                                          tip="向 DeepSeek 自由提问")
-        self.btn_chat.pack(side="right", padx=4, pady=10)
-        self.btn_hist = self._make_button(bar, "🕘 历史与备份",
-                                          lambda: self._select_tab(2),
-                                          tip="查看操作记录与还原修复备份")
-        self.btn_hist.pack(side="right", padx=4, pady=10)
+        self.watch_label = tk.Label(bar, text="", bg=BG, fg=DIM, font=FONT_S)
+        self.watch_label.pack(side="left", padx=4)
+
+        tk.Label(bar, text="DeepSeek 驱动 · 蓝白主题 · 全自动修复",
+                 bg=BG, fg=DIM, font=FONT_S).pack(side="right", padx=16)
 
     def _on_autofix_toggle(self):
         self.cfg["autofix"] = bool(self.autofix_var.get())
@@ -294,45 +284,113 @@ class App:
         body = tk.Frame(self.root, bg=BG)
         body.pack(fill="both", expand=True)
 
-        # ---- 左侧问题列表（卡片）
-        left = tk.Frame(body, bg=PANEL, width=370)
-        left.pack(side="left", fill="y")
-        left.pack_propagate(False)
-        tk.Frame(left, bg=BORDER, width=1).pack(side="right", fill="y")
+        # ================= 左侧导航（OpenFrp 风格侧边栏） =================
+        self.nav = tk.Frame(body, bg=PANEL, width=168)
+        self.nav.pack(side="left", fill="y")
+        self.nav.pack_propagate(False)
+        tk.Frame(self.nav, bg=BORDER, width=1).pack(side="right", fill="y")
 
-        head = tk.Frame(left, bg=PANEL)
-        head.pack(fill="x")
-        tk.Label(head, text="检测到的问题", bg=PANEL, fg=FG,
-                 font=FONT_B, anchor="w").pack(side="left", padx=14, pady=(12, 6))
-        self.issue_count_lbl = tk.Label(head, text="", bg=PANEL, fg="#FFFFFF",
-                                        font=FONT_SB)
-        self.issue_count_lbl.pack(side="right", padx=14, pady=(12, 6))
+        # Logo 区
+        logo = tk.Frame(self.nav, bg=PANEL)
+        logo.pack(fill="x", padx=14, pady=(16, 14))
+        tk.Label(logo, text="🧿 TotemFix", bg=PANEL, fg=ACCENT,
+                 font=FONT_LOGO, anchor="w").pack(fill="x")
+        tk.Label(logo, text="PCL2 报错检测", bg=PANEL, fg=DIM, font=FONT_S,
+                 anchor="w").pack(fill="x")
+        tk.Frame(self.nav, bg=BORDER, height=1).pack(fill="x", padx=14)
 
-        list_canvas, self.issue_cards_inner, list_sb = make_scrollable(left, PANEL)
-        list_canvas.pack(side="left", fill="both", expand=True, padx=(8, 0))
-        list_sb.pack(side="right", fill="y")
+        # 导航项
+        self.nav_items = {}
+        self.current_page = 0
+        for idx, (text, tip) in enumerate([
+                ("🔍 报错检测", "问题列表与 AI 分析、修复计划"),
+                ("💬 AI 问答", "向 DeepSeek 自由提问"),
+                ("🕘 历史与备份", "操作记录与修复备份还原")]):
+            self.nav_items[idx] = self._build_nav_item(text, idx, tip)
+        self._refresh_nav()
 
-        self.issue_hint = tk.Label(left, bg=PANEL, fg=DIM, font=FONT_S,
-                                   text="尚未扫描", wraplength=330, justify="left")
-        self.issue_hint.pack(fill="x", padx=12, pady=(6, 10))
+        # 底部：设置 + 状态
+        bottom = tk.Frame(self.nav, bg=PANEL)
+        bottom.pack(side="bottom", fill="x", pady=(0, 14))
+        self._make_button(bottom, "⚙️ 设置", self._open_settings,
+                          tip="路径检测、DeepSeek 密钥与行为设置").pack(
+            fill="x", padx=14, pady=(0, 8))
+        tk.Label(bottom, text="v2.3 · 本地运行", bg=PANEL, fg=DIM,
+                 font=FONT_S).pack()
 
-        # ---- 右侧 Notebook
-        self.notebook = ttk.Notebook(body)
-        self.notebook.pack(side="left", fill="both", expand=True)
+        # ================= 右侧内容区 =================
+        self.content = tk.Frame(body, bg=BG)
+        self.content.pack(side="left", fill="both", expand=True)
 
-        self.tab_detail = tk.Frame(self.notebook, bg=BG)
-        self.tab_chat = tk.Frame(self.notebook, bg=BG)
-        self.tab_history = tk.Frame(self.notebook, bg=BG)
-        self.notebook.add(self.tab_detail, text=" 报错详情 ")
-        self.notebook.add(self.tab_chat, text=" AI 问答 ")
-        self.notebook.add(self.tab_history, text=" 历史与备份 ")
+        self._build_toolbar()
+
+        pages = tk.Frame(self.content, bg=BG)
+        pages.pack(fill="both", expand=True)
+        self.page_detail = tk.Frame(pages, bg=BG)
+        self.page_chat = tk.Frame(pages, bg=BG)
+        self.page_history = tk.Frame(pages, bg=BG)
+        for p in (self.page_detail, self.page_chat, self.page_history):
+            p.grid(row=0, column=0, sticky="nsew")
+        pages.grid_rowconfigure(0, weight=1)
+        pages.grid_columnconfigure(0, weight=1)
+
+        # 兼容旧属性名（smoke/截图脚本引用）
+        self.tab_detail = self.page_detail
+        self.tab_chat = self.page_chat
+        self.tab_history = self.page_history
 
         self._build_detail_tab()
         self._build_chat_tab()
         self._build_history_tab()
 
+        self._show_page(0)
+
+    def _build_nav_item(self, text, idx, tip):
+        """OpenFrp 风格导航项：左侧 3px 蓝色竖条 + 图标文字，选中白底蓝字。"""
+        item = tk.Frame(self.nav, bg=PANEL, height=42, cursor="hand2")
+        item.pack(fill="x", pady=2)
+        item.pack_propagate(False)
+        bar = tk.Frame(item, bg=PANEL, width=3)
+        bar.pack(side="left", fill="y")
+        lbl = tk.Label(item, text=text, bg=PANEL, fg=FG, font=FONT,
+                       anchor="w", padx=12)
+        lbl.pack(side="left", fill="both", expand=True)
+
+        def on_click(_e=None, i=idx):
+            self._select_tab(i)
+
+        def hover(on, i=idx):
+            if i != self.current_page:
+                item.config(bg=ACCENT_LIGHT if on else PANEL)
+                lbl.config(bg=ACCENT_LIGHT if on else PANEL)
+
+        for w in (item, lbl):
+            w.bind("<Button-1>", on_click)
+            w.bind("<Enter>", lambda e: hover(True))
+            w.bind("<Leave>", lambda e: hover(False))
+        if tip:
+            ToolTip(item, tip)
+        return (item, bar, lbl)
+
+    def _refresh_nav(self):
+        for idx, (item, bar, lbl) in self.nav_items.items():
+            sel = idx == self.current_page
+            item.config(bg=BG if sel else PANEL)
+            bar.config(bg=ACCENT if sel else PANEL)
+            lbl.config(bg=BG if sel else PANEL, fg=ACCENT if sel else FG,
+                       font=FONT_B if sel else FONT)
+
+    def _show_page(self, idx):
+        pages = (self.page_detail, self.page_chat, self.page_history)
+        for i, p in enumerate(pages):
+            if i == idx:
+                p.tkraise()
+        self.current_page = idx
+        self._refresh_nav()
+
     def _select_tab(self, idx):
-        self.notebook.select(idx)
+        """兼容旧调用：0=报错检测 1=AI 问答 2=历史与备份。"""
+        self._show_page(idx)
 
     # ------------------------------------------------ 问题卡片列表
 
@@ -415,11 +473,34 @@ class App:
         issue = next((i for i in self.issues if i["sig"] == sig), None)
         self._select_issue(issue)
 
-    # ------------------------------------------------ 详情页
+    # ------------------------------------------------ 报错检测页
 
     def _build_detail_tab(self):
+        # ---- 页内左侧：问题卡片列表（原顶栏下移入页内，OpenFrp 双栏布局）
+        left = tk.Frame(self.tab_detail, bg=PANEL, width=340)
+        left.pack(side="left", fill="y")
+        left.pack_propagate(False)
+        tk.Frame(left, bg=BORDER, width=1).pack(side="right", fill="y")
+
+        head = tk.Frame(left, bg=PANEL)
+        head.pack(fill="x")
+        tk.Label(head, text="检测到的问题", bg=PANEL, fg=FG,
+                 font=FONT_B, anchor="w").pack(side="left", padx=14, pady=(12, 6))
+        self.issue_count_lbl = tk.Label(head, text="", bg=PANEL, fg="#FFFFFF",
+                                        font=FONT_SB)
+        self.issue_count_lbl.pack(side="right", padx=14, pady=(12, 6))
+
+        list_canvas, self.issue_cards_inner, list_sb = make_scrollable(left, PANEL)
+        list_canvas.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        list_sb.pack(side="right", fill="y")
+
+        self.issue_hint = tk.Label(left, bg=PANEL, fg=DIM, font=FONT_S,
+                                   text="尚未扫描", wraplength=300, justify="left")
+        self.issue_hint.pack(fill="x", padx=12, pady=(6, 10))
+
+        # ---- 页内右侧：详情区
         pad = tk.Frame(self.tab_detail, bg=BG)
-        pad.pack(fill="both", expand=True, padx=16, pady=12)
+        pad.pack(side="left", fill="both", expand=True, padx=16, pady=12)
 
         self.d_title = tk.Label(pad, text="选择左侧问题查看详情", bg=BG, fg=FG,
                                 font=FONT_T, anchor="w", justify="left")
@@ -1182,8 +1263,13 @@ class App:
     def _update_watch_label(self):
         key_set = bool(self.cfg.get("api_key"))
         pcl_ok = config._is_pcl_dir(self.cfg.get("pcl_dir", ""))
+        try:
+            self.status_dot.itemconfig(self._dot_id,
+                                       fill=GREEN if pcl_ok else YELLOW)
+        except (tk.TclError, AttributeError):
+            pass
         self.watch_label.config(
-            text=f"{'🟢 监控中' if pcl_ok else '🟡 等待 PCL2 启动'}"
+            text=f"{'监控中' if pcl_ok else '等待 PCL2 启动'}"
                  f" · DeepSeek {'已配置' if key_set else '未配置'}"
                  f" · 询问{'开' if self.cfg.get('ask_before_fix', True) else '关'}"
                  f" · {self.cfg.get('watch_interval', 3)}s/次")
