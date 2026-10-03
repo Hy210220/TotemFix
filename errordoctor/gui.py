@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""v2.1 桌面界面（tkinter，PCL2 风格蓝白简约配色，零第三方依赖）。
+"""v2.2 桌面界面（tkinter，PCL2 设计语言：卡片式布局 + 主题蓝强调色 +
+悬停反馈 + 分区标题；蓝白简约配色，零第三方依赖）。
 
-结构：
-  ├─ 顶栏：Logo + 状态 + 立即扫描 / 自动修复开关 / 设置
-  ├─ 左侧：检测到的问题列表
+界面结构：
+  ├─ 顶栏：Logo + 状态 + 立即扫描 / 自动修复开关 / 设置（带悬停提示）
+  ├─ 左侧：检测到的问题卡片列表（严重度色条 / 类型徽章 / 悬停高亮）
   └─ 右侧 Notebook：
-       ├─ 报错详情（日志摘要 + AI 分析结果 + 修复计划勾选执行）
-       ├─ AI 问答（内嵌对话窗口）
+       ├─ 报错详情（日志摘要 + AI 分析分区卡片 + 修复计划勾选执行）
+       ├─ AI 问答（左右气泡对话）
        └─ 历史与备份
+  └─ 右下角浮动通知（toast）
 自动流程：启动即扫描 → 发现报错自动分析 → 按设置弹“修改前确认”或全自动执行修复；
 后台监控 PCL2 进程（用户打开 PCL2 时自动定位其文件夹）与日志变化。
 
@@ -29,13 +31,13 @@ from . import config, engine as engine_mod, history
 
 BG = "#FFFFFF"          # 主背景
 PANEL = "#F5F8FB"       # 侧栏 / 卡片底
-PANEL2 = "#E9F1F8"      # 次级面板
+PANEL2 = "#E9F1F8"      # 次级面板 / 悬浮底色
 BORDER = "#D5E1EC"      # 描边
 FG = "#223241"          # 主文字
 DIM = "#6F7F8F"         # 次要文字
 ACCENT = "#2C8BC8"      # PCL 主题蓝
 ACCENT_DARK = "#1F74A8"
-ACCENT_LIGHT = "#D8EAF7"  # 浅蓝选中
+ACCENT_LIGHT = "#D8EAF7"  # 浅蓝选中 / 悬停
 GREEN = "#2E9E5B"
 RED = "#D9534F"
 YELLOW = "#B07A1F"
@@ -45,12 +47,74 @@ LOG_BG = "#F0F5FA"
 
 SEV_COLOR = {100: RED, 90: "#C96A2E", 80: YELLOW, 70: BLUE, 60: BLUE, 50: DIM}
 
+# 字体规范（Windows 使用微软雅黑，其他平台自动回退）
+FONT = ("Microsoft YaHei UI", 10)
+FONT_B = ("Microsoft YaHei UI", 11, "bold")
+FONT_T = ("Microsoft YaHei UI", 13, "bold")
+FONT_LOGO = ("Microsoft YaHei UI", 15, "bold")
+FONT_S = ("Microsoft YaHei UI", 9)
+FONT_SB = ("Microsoft YaHei UI", 9, "bold")
+MONO = ("Consolas", 10)
+MONO_S = ("Consolas", 9)
+
 
 def center(win: tk.Toplevel, w: int, h: int):
     win.update_idletasks()
     x = max(0, (win.winfo_screenwidth() - w) // 2)
     y = max(0, (win.winfo_screenheight() - h) // 3)
     win.geometry(f"{w}x{h}+{x}+{y}")
+
+
+class ToolTip:
+    """轻量悬浮提示。"""
+
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tw = None
+        widget.bind("<Enter>", self._show)
+        widget.bind("<Leave>", self._hide)
+
+    def _show(self, _e):
+        if self.tw:
+            return
+        x = self.widget.winfo_rootx() + 14
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.tw = tk.Toplevel(self.widget)
+        self.tw.wm_overrideredirect(True)
+        self.tw.wm_geometry(f"+{x}+{y}")
+        tk.Label(self.tw, text=self.text, bg="#3A4756", fg="#FFFFFF",
+                 font=FONT_S, padx=9, pady=5, justify="left").pack()
+        self.tw.attributes("-topmost", True)
+
+    def _hide(self, _e):
+        if self.tw:
+            self.tw.destroy()
+            self.tw = None
+
+
+def make_scrollable(parent, bg):
+    """返回 (canvas, inner, scrollbar)：可滚动的帧容器（支持滚轮）。"""
+    canvas = tk.Canvas(parent, bg=bg, highlightthickness=0, bd=0)
+    sb = tk.Scrollbar(parent, orient="vertical", command=canvas.yview,
+                      bg=PANEL2, activebackground=BORDER, relief="flat", bd=0)
+    inner = tk.Frame(canvas, bg=bg)
+    win = canvas.create_window((0, 0), window=inner, anchor="nw")
+    canvas.configure(yscrollcommand=sb.set)
+
+    def _set_width(e):
+        canvas.itemconfigure(win, width=e.width)
+
+    def _set_scroll(e):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    inner.bind("<Configure>", _set_width)
+    inner.bind("<Configure>", _set_scroll, add="+")
+    for w in (canvas, inner):
+        w.bind("<MouseWheel>", lambda e: canvas.yview_scroll(-int(e.delta / 120), "units"))
+        w.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+        w.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+    return canvas, inner, sb
 
 
 class App:
@@ -68,9 +132,11 @@ class App:
         self.issues = []
         self.analyses = {}          # sig -> 结果
         self.selected_sig = None
+        self.issue_cards = {}       # sig -> (card, body, bar, ...) 卡片控件
         self.plan_vars = []         # [(tk.BooleanVar, item)]
         self.auto_round_sigs = set()
         self.chat_history = []      # [{"role","content"}]
+        self.chat_content = ""      # 纯文本累积（测试与调试用）
         self._scan_after_id = None
         self._mc_candidates = []    # 设置页候选 .minecraft 列表
         self._started = time.time()
@@ -90,8 +156,9 @@ class App:
         self.root = tk.Tk()
         self.root.title("TotemFix")
         self.root.configure(bg=BG)
-        self.root.geometry("1100x720")
-        self.root.minsize(920, 600)
+        self.root.option_add("*Font", FONT)
+        self.root.geometry("1120x740")
+        self.root.minsize(940, 620)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         style = ttk.Style(self.root)
@@ -102,16 +169,17 @@ class App:
         style.configure("TNotebook", background=BG, borderwidth=0,
                         tabmargins=(0, 10, 0, 0))
         style.configure("TNotebook.Tab", background=PANEL, foreground=DIM,
-                        padding=(18, 9), borderwidth=0, font=("", 10))
+                        padding=(18, 9), borderwidth=0, font=FONT)
         style.map("TNotebook.Tab",
                   background=[("selected", BG)],
                   foreground=[("selected", ACCENT)])
 
     def _make_button(self, master, text, command=None, primary=False,
-                     big=False, danger=False, disabled=False):
-        """primary：PCL 蓝底白字；普通：白底蓝字带浅描边。"""
+                     big=False, danger=False, tip=None):
+        """primary：PCL 蓝底白字；普通：白底蓝字带浅描边；带悬停反馈。"""
         bg = ACCENT if primary else BG
         fg = "#FFFFFF" if primary else (RED if danger else ACCENT)
+        hover_bg = ACCENT_DARK if primary else ACCENT_LIGHT
         active_bg = ACCENT_DARK if primary else ACCENT_LIGHT
         b = tk.Button(master, text=text, command=command, bg=bg, fg=fg,
                       activebackground=active_bg, activeforeground=fg,
@@ -120,8 +188,11 @@ class App:
                       highlightbackground=ACCENT if primary else BORDER,
                       highlightcolor=ACCENT,
                       padx=18 if big else 12, pady=8 if big else 5,
-                      font=("", 11, "bold") if big else ("", 10),
-                      state="disabled" if disabled else "normal")
+                      font=FONT_B if big else FONT)
+        b.bind("<Enter>", lambda e: b.config(bg=hover_bg))
+        b.bind("<Leave>", lambda e: b.config(bg=bg))
+        if tip:
+            ToolTip(b, tip)
         return b
 
     # ================================================================ 顶栏
@@ -132,34 +203,39 @@ class App:
         tk.Frame(bar, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
         logo = tk.Frame(bar, bg=BG)
-        logo.pack(side="left", padx=16, pady=10)
+        logo.pack(side="left", padx=16, pady=9)
         tk.Label(logo, text="🧿 TotemFix", bg=BG, fg=ACCENT,
-                 font=("", 15, "bold")).pack(anchor="w")
+                 font=FONT_LOGO).pack(anchor="w")
         tk.Label(logo, text="PCL2 报错检测 · DeepSeek 自动修复",
-                 bg=BG, fg=DIM, font=("", 8)).pack(anchor="w")
+                 bg=BG, fg=DIM, font=FONT_S).pack(anchor="w")
 
         self.btn_scan = self._make_button(bar, "🔍 立即扫描", self._on_scan_click,
-                                          primary=True, big=True)
+                                          primary=True, big=True,
+                                          tip="扫描 PCL 与 Minecraft 的全部日志和崩溃报告")
         self.btn_scan.pack(side="left", padx=(16, 6), pady=10)
 
         self.autofix_var = tk.BooleanVar(value=bool(self.cfg.get("autofix")))
         cb = tk.Checkbutton(bar, text="自动修复", variable=self.autofix_var,
                             command=self._on_autofix_toggle, bg=BG, fg=FG,
                             activebackground=BG, activeforeground=ACCENT,
-                            selectcolor=BG, font=("", 10),
+                            selectcolor=BG, font=FONT,
                             highlightthickness=0, bd=0, cursor="hand2")
         cb.pack(side="left", padx=6)
+        ToolTip(cb, "检测到报错后自动分析并执行修复（默认弹窗确认）")
 
-        self.watch_label = tk.Label(bar, text="", bg=BG, fg=DIM, font=("", 9))
+        self.watch_label = tk.Label(bar, text="", bg=BG, fg=DIM, font=FONT_S)
         self.watch_label.pack(side="left", padx=10)
 
-        self.btn_settings = self._make_button(bar, "⚙️ 设置", self._open_settings)
+        self.btn_settings = self._make_button(bar, "⚙️ 设置", self._open_settings,
+                                              tip="路径检测、DeepSeek 密钥与行为设置")
         self.btn_settings.pack(side="right", padx=(4, 16), pady=10)
         self.btn_chat = self._make_button(bar, "💬 AI 问答",
-                                          lambda: self._select_tab(1))
+                                          lambda: self._select_tab(1),
+                                          tip="向 DeepSeek 自由提问")
         self.btn_chat.pack(side="right", padx=4, pady=10)
         self.btn_hist = self._make_button(bar, "🕘 历史与备份",
-                                          lambda: self._select_tab(2))
+                                          lambda: self._select_tab(2),
+                                          tip="查看操作记录与还原修复备份")
         self.btn_hist.pack(side="right", padx=4, pady=10)
 
     def _on_autofix_toggle(self):
@@ -190,14 +266,36 @@ class App:
                     pass
         self.root.destroy()
 
+    # ================================================================ 浮动通知
+
+    def _toast(self, msg, kind="info"):
+        colors = {"info": ACCENT, "ok": GREEN, "err": RED, "warn": YELLOW}
+        if not hasattr(self, "toast_frame") or not self.toast_frame.winfo_exists():
+            self.toast_frame = tk.Frame(self.root, bg=BG)
+            self.toast_frame.place(relx=0.985, rely=0.955, anchor="se")
+        t = tk.Frame(self.toast_frame, bg=BG, highlightthickness=1,
+                     highlightbackground=colors.get(kind, ACCENT))
+        t.pack(fill="x", pady=3, anchor="e")
+        tk.Label(t, text=" " + msg, bg=BG, fg=FG, font=FONT, padx=12, pady=6,
+                 justify="left", wraplength=400, anchor="w").pack(side="left")
+        self.toast_frame.lift()
+
+        def gone():
+            try:
+                t.destroy()
+            except tk.TclError:
+                pass
+
+        self.root.after(4000, gone)
+
     # ================================================================ 主体
 
     def _build_body(self):
         body = tk.Frame(self.root, bg=BG)
         body.pack(fill="both", expand=True)
 
-        # ---- 左侧问题列表
-        left = tk.Frame(body, bg=PANEL, width=350)
+        # ---- 左侧问题列表（卡片）
+        left = tk.Frame(body, bg=PANEL, width=370)
         left.pack(side="left", fill="y")
         left.pack_propagate(False)
         tk.Frame(left, bg=BORDER, width=1).pack(side="right", fill="y")
@@ -205,24 +303,18 @@ class App:
         head = tk.Frame(left, bg=PANEL)
         head.pack(fill="x")
         tk.Label(head, text="检测到的问题", bg=PANEL, fg=FG,
-                 font=("", 11, "bold"), anchor="w").pack(side="left",
-                                                        padx=14, pady=(12, 6))
+                 font=FONT_B, anchor="w").pack(side="left", padx=14, pady=(12, 6))
         self.issue_count_lbl = tk.Label(head, text="", bg=PANEL, fg="#FFFFFF",
-                                        font=("", 9, "bold"))
+                                        font=FONT_SB)
         self.issue_count_lbl.pack(side="right", padx=14, pady=(12, 6))
 
-        self.issue_list = tk.Listbox(left, bg=PANEL, fg=FG, bd=0,
-                                     selectbackground=ACCENT_LIGHT,
-                                     selectforeground=FG,
-                                     activestyle="none",
-                                     highlightthickness=0,
-                                     font=("", 10))
-        self.issue_list.pack(fill="both", expand=True, padx=10)
-        self.issue_list.bind("<<ListboxSelect>>", self._on_issue_select)
-        self.issue_list.bind("<Double-Button-1>", lambda e: self._analyze_selected())
-        self.issue_hint = tk.Label(left, bg=PANEL, fg=DIM, font=("", 9),
-                                   text="尚未扫描", wraplength=320, justify="left")
-        self.issue_hint.pack(fill="x", padx=12, pady=10)
+        list_canvas, self.issue_cards_inner, list_sb = make_scrollable(left, PANEL)
+        list_canvas.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        list_sb.pack(side="right", fill="y")
+
+        self.issue_hint = tk.Label(left, bg=PANEL, fg=DIM, font=FONT_S,
+                                   text="尚未扫描", wraplength=330, justify="left")
+        self.issue_hint.pack(fill="x", padx=12, pady=(6, 10))
 
         # ---- 右侧 Notebook
         self.notebook = ttk.Notebook(body)
@@ -242,6 +334,83 @@ class App:
     def _select_tab(self, idx):
         self.notebook.select(idx)
 
+    # ------------------------------------------------ 问题卡片列表
+
+    def _render_issue_list(self):
+        for w in self.issue_cards_inner.winfo_children():
+            w.destroy()
+        self.issue_cards = {}
+        for it in self.issues:
+            sev = SEV_COLOR.get(it["severity"], DIM)
+            card = tk.Frame(self.issue_cards_inner, bg=BG, highlightthickness=1,
+                            highlightbackground=BORDER, cursor="hand2")
+            card.pack(fill="x", padx=8, pady=3)
+            bar = tk.Frame(card, bg=sev, width=4)
+            bar.pack(side="left", fill="y")
+            body = tk.Frame(card, bg=BG)
+            body.pack(side="left", fill="x", expand=True, padx=10, pady=8)
+            row1 = tk.Frame(body, bg=BG)
+            row1.pack(fill="x")
+            badge = tk.Label(row1, text=" " + it["kind"] + " ", bg=sev, fg="#FFFFFF",
+                             font=FONT_SB, padx=1)
+            badge.pack(side="left")
+            sev_lbl = tk.Label(row1, text=it["severity_text"], bg=BG, fg=sev,
+                               font=FONT_SB)
+            sev_lbl.pack(side="left", padx=6)
+            title = tk.Label(body, text=it["title"][:90], bg=BG, fg=FG, font=FONT,
+                             anchor="w", justify="left", wraplength=270)
+            title.pack(fill="x", pady=(4, 0))
+            meta = tk.Label(body, text=f"{it['source']} · 第 {it['line']} 行",
+                            bg=BG, fg=DIM, font=FONT_S)
+            meta.pack(anchor="w")
+            sig = it["sig"]
+            self.issue_cards[sig] = (card, body, bar, badge, sev_lbl, title, meta, sev)
+            for wdg in (card, body, row1, badge, sev_lbl, title, meta):
+                wdg.bind("<Enter>",
+                         lambda e, c=card, b=body: self._card_hover(c, b, True))
+                wdg.bind("<Leave>",
+                         lambda e, c=card, b=body: self._card_hover(c, b, False))
+                wdg.bind("<Button-1>",
+                         lambda e, s=sig: self._select_issue_by_sig(s))
+                wdg.bind("<Double-Button-1>",
+                         lambda e, s=sig: (self._select_issue_by_sig(s),
+                                           self._analyze_selected()))
+        n = len(self.issues)
+        if n:
+            self.issue_count_lbl.config(text=f" {n} ", bg=ACCENT)
+            self.issue_hint.config(text=f"共 {n} 个问题 · 单击查看，双击直接 AI 分析")
+        else:
+            self.issue_count_lbl.config(text="", bg=PANEL)
+            self.issue_hint.config(text="🎉 未发现明显报错，后台持续监控中…")
+            tk.Label(self.issue_cards_inner, text="🎉 未发现明显报错\n\n后台持续监控中，\n出现新报错会自动弹出分析窗口",
+                     bg=PANEL, fg=DIM, font=FONT, justify="center").pack(pady=40)
+            self._select_issue(None)
+        self._refresh_card_states()
+
+    def _card_hover(self, card, body, on):
+        for s, (c, b, *_rest) in self.issue_cards.items():
+            if (c is card) and s != self.selected_sig and not self._quit_flag:
+                try:
+                    c.config(bg=ACCENT_LIGHT if on else BG)
+                    b.config(bg=ACCENT_LIGHT if on else BG)
+                except tk.TclError:
+                    pass
+
+    def _refresh_card_states(self):
+        for s, (card, body, bar, *_rest) in self.issue_cards.items():
+            selected = (s == self.selected_sig)
+            try:
+                card.config(bg=ACCENT_LIGHT if selected else BG,
+                            highlightbackground=ACCENT if selected else BORDER)
+                body.config(bg=ACCENT_LIGHT if selected else BG)
+                bar.config(bg=ACCENT if selected else self.issue_cards[s][7])
+            except (KeyError, IndexError, tk.TclError):
+                pass
+
+    def _select_issue_by_sig(self, sig):
+        issue = next((i for i in self.issues if i["sig"] == sig), None)
+        self._select_issue(issue)
+
     # ------------------------------------------------ 详情页
 
     def _build_detail_tab(self):
@@ -249,20 +418,20 @@ class App:
         pad.pack(fill="both", expand=True, padx=16, pady=12)
 
         self.d_title = tk.Label(pad, text="选择左侧问题查看详情", bg=BG, fg=FG,
-                                font=("", 13, "bold"), anchor="w", justify="left")
+                                font=FONT_T, anchor="w", justify="left")
         self.d_title.pack(fill="x")
-        self.d_meta = tk.Label(pad, text="", bg=BG, fg=DIM, font=("", 9),
+        self.d_meta = tk.Label(pad, text="", bg=BG, fg=DIM, font=FONT_S,
                                anchor="w", justify="left")
         self.d_meta.pack(fill="x", pady=(2, 8))
 
-        tk.Label(pad, text="日志摘要", bg=BG, fg=DIM, font=("", 9, "bold"),
+        tk.Label(pad, text="日志摘要", bg=BG, fg=DIM, font=FONT_SB,
                  anchor="w").pack(fill="x")
         logframe = tk.Frame(pad, bg=LOG_BG, highlightthickness=1,
                             highlightbackground=BORDER)
         logframe.pack(fill="x")
         self.d_log = tk.Text(logframe, bg=LOG_BG, fg=FG, bd=0,
-                             relief="flat", wrap="word", height=8,
-                             font=("Consolas", 9), highlightthickness=0)
+                             relief="flat", wrap="word", height=7,
+                             font=MONO_S, highlightthickness=0)
         log_scroll = tk.Scrollbar(logframe, command=self.d_log.yview, bg=PANEL2,
                                   activebackground=BORDER, relief="flat", bd=0)
         self.d_log.config(yscrollcommand=log_scroll.set)
@@ -272,31 +441,24 @@ class App:
         btns = tk.Frame(pad, bg=BG)
         btns.pack(fill="x", pady=10)
         self.btn_analyze = self._make_button(btns, "🤖 AI 分析此报错",
-                                             self._analyze_selected, primary=True)
+                                             self._analyze_selected, primary=True,
+                                             tip="把日志摘要发送给 DeepSeek，返回原因/文件/解决办法")
         self.btn_analyze.pack(side="left")
-        self._make_button(btns, "📂 打开文件位置", self._open_file).pack(side="left", padx=8)
-        self._make_button(btns, "📄 预览文件", self._preview_file).pack(side="left")
-        self._make_button(btns, "🤖 分析全部问题", self._analyze_all).pack(side="right")
+        self._make_button(btns, "📂 打开文件位置", self._open_file,
+                          tip="在资源管理器中定位该日志/崩溃报告").pack(side="left", padx=8)
+        self._make_button(btns, "📄 预览文件", self._preview_file,
+                          tip="直接查看该日志文件内容").pack(side="left")
+        self._make_button(btns, "🤖 分析全部问题", self._analyze_all,
+                          tip="依次分析列表中的全部报错").pack(side="right")
 
-        tk.Label(pad, text="AI 分析结果", bg=BG, fg=DIM, font=("", 9, "bold"),
-                 anchor="w").pack(fill="x", pady=(4, 0))
+        tk.Label(pad, text="AI 分析结果", bg=BG, fg=DIM, font=FONT_SB,
+                 anchor="w").pack(fill="x", pady=(4, 2))
         aframe = tk.Frame(pad, bg=BG)
         aframe.pack(fill="both", expand=True)
-        self.d_analysis = tk.Text(aframe, bg=BG, fg=FG, bd=0, relief="flat",
-                                  wrap="word", height=10,
-                                  font=("", 10), highlightthickness=0)
-        self.d_analysis.tag_configure("h", foreground=ACCENT,
-                                      font=("", 10, "bold"))
-        self.d_analysis.tag_configure("code", foreground=CODE,
-                                      font=("Consolas", 9))
-        self.d_analysis.tag_configure("dim", foreground=DIM, font=("", 9))
-        self.d_analysis.tag_configure("err", foreground=RED)
-        self.d_analysis.config(state="disabled")
-        ascroll = tk.Scrollbar(aframe, command=self.d_analysis.yview, bg=PANEL2,
-                               activebackground=BORDER, relief="flat", bd=0)
-        self.d_analysis.config(yscrollcommand=ascroll.set)
-        self.d_analysis.pack(side="left", fill="both", expand=True)
-        ascroll.pack(side="right", fill="y")
+        self.analysis_canvas, self.analysis_inner, self.analysis_sb = \
+            make_scrollable(aframe, BG)
+        self.analysis_canvas.pack(side="left", fill="both", expand=True)
+        self.analysis_sb.pack(side="right", fill="y")
 
         # 修复计划区（动态重建）
         self.plan_frame = tk.Frame(pad, bg=BG)
@@ -304,17 +466,135 @@ class App:
 
         self.d_empty = tk.Label(pad, text="👈 扫描后从左侧选择一个报错，点击“AI 分析此报错”，\n"
                                           "AI 将给出出错原因、出错文件位置与解决办法。",
-                                bg=BG, fg=DIM, font=("", 10), justify="left")
+                                bg=BG, fg=DIM, font=FONT, justify="left")
         self.d_empty.place(relx=0.5, rely=0.55, anchor="center")
 
-    def _set_analysis_text(self, text, tags=None):
-        self.d_analysis.config(state="normal")
-        self.d_analysis.delete("1.0", "end")
-        self.d_analysis.insert("1.0", text)
-        if tags:
-            for name, start, end in tags:
-                self.d_analysis.tag_add(name, start, end)
-        self.d_analysis.config(state="disabled")
+    # ---- 分析结果分区卡片
+
+    def _analysis_section(self, icon, title, content, fg=FG, content_font=None):
+        card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
+                        highlightbackground=BORDER)
+        card.pack(fill="x", pady=3)
+        head = tk.Frame(card, bg=BG)
+        head.pack(fill="x", padx=12, pady=(8, 0))
+        tk.Label(head, text=f"{icon} {title}", bg=BG, fg=ACCENT,
+                 font=FONT_B).pack(side="left")
+        tk.Label(card, text=content, bg=BG, fg=fg, font=content_font or FONT,
+                 justify="left", anchor="w", wraplength=600).pack(
+            fill="x", padx=12, pady=(4, 10))
+
+    def _render_analysis(self, rec):
+        for w in self.analysis_inner.winfo_children():
+            w.destroy()
+        if rec is None:
+            return
+        if rec.get("error"):
+            self._analysis_section("❌", "分析失败", rec["error"], fg=RED)
+            self._clear_plan_frame()
+            return
+        self._analysis_section("📋", "总结", rec.get("summary") or "（无）")
+        self._analysis_section("🔍", "出错原因", rec.get("cause") or "（无）")
+        ef = rec.get("error_file") or ""
+        self._analysis_file(ef)
+        steps = rec.get("solution_steps") or []
+        if steps:
+            self._analysis_steps(steps)
+        conf_map = {"high": ("高", GREEN), "medium": ("中", YELLOW),
+                    "low": ("低", RED)}
+        conf_txt, conf_color = conf_map.get(rec.get("confidence"), ("中", YELLOW))
+        self._analysis_confidence(conf_txt, conf_color)
+        self._render_plan(rec)
+        self.analysis_canvas.yview_moveto(0)
+
+    def _analysis_file(self, ef):
+        card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
+                        highlightbackground=BORDER)
+        card.pack(fill="x", pady=3)
+        head = tk.Frame(card, bg=BG)
+        head.pack(fill="x", padx=12, pady=(8, 0))
+        tk.Label(head, text="📁 出错文件位置", bg=BG, fg=ACCENT,
+                 font=FONT_B).pack(side="left")
+        if ef:
+            row = tk.Frame(card, bg=BG)
+            row.pack(fill="x", padx=12, pady=(4, 10))
+            tk.Label(row, text=ef, bg=LOG_BG, fg=CODE, font=MONO,
+                     padx=8, pady=3).pack(side="left")
+            self._make_button(row, "预览", lambda: self._open_rel(ef, preview=True),
+                              tip="查看该文件内容").pack(side="left", padx=8)
+            self._make_button(row, "打开位置", lambda: self._open_rel(ef),
+                              tip="在资源管理器中定位该文件").pack(side="left")
+        else:
+            tk.Label(card, text="（AI 未能定位到具体文件）", bg=BG, fg=DIM,
+                     font=FONT, padx=12, pady=(4, 10), anchor="w").pack(fill="x")
+
+    def _analysis_steps(self, steps):
+        card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
+                        highlightbackground=BORDER)
+        card.pack(fill="x", pady=3)
+        head = tk.Frame(card, bg=BG)
+        head.pack(fill="x", padx=12, pady=(8, 2))
+        tk.Label(head, text="✅ 解决办法", bg=BG, fg=ACCENT,
+                 font=FONT_B).pack(side="left")
+        for i, s in enumerate(steps, 1):
+            row = tk.Frame(card, bg=BG)
+            row.pack(fill="x", padx=12, pady=1)
+            tk.Label(row, text=f"{i}.", bg=BG, fg=ACCENT, font=FONT_B).pack(
+                side="left", anchor="n")
+            tk.Label(row, text=s, bg=BG, fg=FG, font=FONT, justify="left",
+                     anchor="w", wraplength=560).pack(side="left", padx=(4, 0))
+        tk.Frame(card, bg=BG, height=8).pack()
+
+    def _analysis_confidence(self, text, color):
+        card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
+                        highlightbackground=BORDER)
+        card.pack(fill="x", pady=3)
+        row = tk.Frame(card, bg=BG)
+        row.pack(fill="x", padx=12, pady=8)
+        tk.Label(row, text="🎯 置信度", bg=BG, fg=ACCENT, font=FONT_B).pack(side="left")
+        tk.Label(row, text=f" {text} ", bg=color, fg="#FFFFFF",
+                 font=FONT_SB).pack(side="left", padx=8)
+
+    def _open_rel(self, rel, preview=False):
+        """打开/预览 AI 给出的 .minecraft 相对路径文件。"""
+        mc = self.cfg.get("mc_dir", "")
+        if not mc:
+            messagebox.showinfo("提示", "尚未配置 Minecraft 文件夹。", parent=self.root)
+            return
+        p = (rel or "").strip().replace("\\", "/")
+        if not p or p.startswith("/") or (len(p) > 1 and p[1] == ":") \
+                or ".." in p.split("/"):
+            messagebox.showinfo("提示", "该路径不在 Minecraft 文件夹内。", parent=self.root)
+            return
+        full = os.path.abspath(os.path.join(mc, *p.split("/")))
+        if not os.path.exists(full):
+            messagebox.showinfo("提示", f"文件不存在：{full}", parent=self.root)
+            return
+        if preview:
+            try:
+                with open(full, "r", encoding="utf-8", errors="replace") as f:
+                    text = f.read(100 * 1024)
+                w = tk.Toplevel(self.root, bg=BG)
+                w.title("文件预览 - " + os.path.basename(full))
+                w.transient(self.root)
+                center(w, 760, 480)
+                t = tk.Text(w, bg=LOG_BG, fg=FG, relief="flat", bd=0,
+                            wrap="none", font=MONO_S,
+                            highlightthickness=1, highlightbackground=BORDER)
+                t.insert("1.0", text)
+                t.config(state="disabled")
+                t.pack(fill="both", expand=True, padx=10, pady=10)
+            except OSError as e:
+                messagebox.showerror("预览失败", str(e), parent=self.root)
+            return
+        try:
+            if os.name == "nt":
+                subprocess.Popen(["explorer", "/select,", full])
+            else:
+                subprocess.Popen(["xdg-open", os.path.dirname(full)])
+        except OSError as e:
+            messagebox.showerror("打开失败", str(e), parent=self.root)
+
+    # ---- 修复计划
 
     def _clear_plan_frame(self):
         for w in self.plan_frame.winfo_children():
@@ -326,10 +606,10 @@ class App:
         plan = result.get("fix_plan") or []
         if not plan:
             tk.Label(self.plan_frame, text="AI 未生成自动修复计划，请按上方步骤手动操作。",
-                     bg=BG, fg=DIM, font=("", 9)).pack(anchor="w", pady=(8, 2))
+                     bg=BG, fg=DIM, font=FONT_S).pack(anchor="w", pady=(8, 2))
             return
         tk.Label(self.plan_frame, text="🛠 AI 修复计划（执行前自动备份，可在“历史与备份”页还原）",
-                 bg=BG, fg=FG, font=("", 10, "bold")).pack(anchor="w", pady=(10, 4))
+                 bg=BG, fg=FG, font=FONT_B).pack(anchor="w", pady=(10, 4))
         icons = {"delete": ("🗑 删除", RED), "rename": ("🔄 重命名", YELLOW),
                  "edit": ("✏️ 替换文本", BLUE), "write": ("📝 写入文件", GREEN)}
         for item in plan:
@@ -343,11 +623,11 @@ class App:
                                 highlightthickness=0, bd=0)
             cb.pack(side="left", padx=(8, 2), pady=4)
             tk.Label(row, text=icon, bg=PANEL, fg=color,
-                     font=("", 10, "bold")).pack(side="left", pady=4)
+                     font=FONT_B).pack(side="left", pady=4)
             tk.Label(row, text=item.get("path", ""), bg=PANEL, fg=CODE,
-                     font=("Consolas", 10)).pack(side="left", padx=6, pady=4)
+                     font=MONO).pack(side="left", padx=6, pady=4)
             tk.Label(row, text=item.get("reason", ""), bg=PANEL, fg=DIM,
-                     font=("", 9)).pack(side="left", padx=6, pady=4)
+                     font=FONT_S).pack(side="left", padx=6, pady=4)
             self.plan_vars.append((var, item))
         bar = tk.Frame(self.plan_frame, bg=BG)
         bar.pack(fill="x", pady=(10, 4))
@@ -371,43 +651,53 @@ class App:
             self.engine.apply(items, reason="manual")
             self._set_status(f"正在执行 {len(items)} 项修复…")
 
-    # ------------------------------------------------ AI 问答页
+    # ------------------------------------------------ AI 问答页（气泡）
 
     def _build_chat_tab(self):
-        self.chat_text = tk.Text(self.tab_chat, bg=BG, fg=FG, bd=0, relief="flat",
-                                 wrap="word", font=("", 10), highlightthickness=0)
-        self.chat_text.tag_configure("user", foreground=ACCENT,
-                                     font=("", 10, "bold"))
-        self.chat_text.tag_configure("ai", foreground=FG)
-        self.chat_text.tag_configure("sys", foreground=DIM, font=("", 9))
-        self.chat_text.config(state="disabled")
-        cscroll = tk.Scrollbar(self.tab_chat, command=self.chat_text.yview, bg=PANEL2,
-                               activebackground=BORDER, relief="flat", bd=0)
-        self.chat_text.config(yscrollcommand=cscroll.set)
-        cscroll.pack(side="right", fill="y")
-        self.chat_text.pack(side="top", fill="both", expand=True, padx=(16, 0), pady=(12, 6))
+        chat_canvas, self.chat_inner, chat_sb = make_scrollable(self.tab_chat, BG)
+        chat_canvas.pack(side="left", fill="both", expand=True, padx=(16, 0), pady=(12, 6))
+        chat_sb.pack(side="right", fill="y", pady=(12, 6))
+        self.chat_canvas = chat_canvas
 
         bar = tk.Frame(self.tab_chat, bg=BG)
         bar.pack(fill="x", padx=16, pady=(0, 12))
         self.chat_input = tk.Entry(bar, bg=LOG_BG, fg=FG, insertbackground=FG,
                                    relief="flat", bd=0,
                                    highlightthickness=1, highlightbackground=BORDER,
-                                   highlightcolor=ACCENT, font=("", 11))
+                                   highlightcolor=ACCENT, font=FONT)
         self.chat_input.pack(side="left", fill="x", expand=True, ipady=8)
         self.chat_input.bind("<Return>", lambda e: self._send_chat())
-        self._make_button(bar, "发送 ⏎", self._send_chat, primary=True).pack(
-            side="left", padx=(8, 0))
+        self._make_button(bar, "发送 ⏎", self._send_chat, primary=True,
+                          tip="回车或点击发送").pack(side="left", padx=(8, 0))
 
         self._chat_append("sys", "你好！我是内嵌的 Minecraft 故障排查助手（DeepSeek 驱动）。\n"
                                  "可以把报错日志粘贴给我，或直接描述问题，例如：“进游戏就闪退怎么办？”")
 
     def _chat_append(self, role, text):
-        self.chat_text.config(state="normal")
-        tag = {"user": "user", "ai": "ai", "sys": "sys"}.get(role, "ai")
-        label = {"user": "你：", "ai": "AI：", "sys": ""}.get(role, "")
-        self.chat_text.insert("end", f"{label}{text}\n\n", tag)
-        self.chat_text.see("end")
-        self.chat_text.config(state="disabled")
+        self.chat_content += text + "\n"
+        align = {"user": "e", "ai": "w"}.get(role, "center")
+        bubble_bg = {"user": ACCENT, "ai": PANEL2, "sys": BG}.get(role, PANEL2)
+        fg = {"user": "#FFFFFF", "ai": FG, "sys": DIM}.get(role, FG)
+        name = {"user": "你", "ai": "AI", "sys": ""}.get(role, "")
+        row = tk.Frame(self.chat_inner, bg=BG)
+        row.pack(fill="x", padx=14, pady=4)
+        wrap = tk.Frame(row, bg=BG)
+        if align == "e":
+            wrap.pack(anchor="e")
+        elif align == "w":
+            wrap.pack(anchor="w")
+        else:
+            wrap.pack(anchor="center")
+        if name:
+            tk.Label(wrap, text=name, bg=BG, fg=DIM, font=FONT_S).pack(
+                anchor=align if align != "center" else "center")
+        b = tk.Label(wrap, text=text, bg=bubble_bg, fg=fg, font=FONT,
+                     justify="left", wraplength=640, padx=12, pady=8,
+                     highlightthickness=1,
+                     highlightbackground=BORDER if role != "user" else ACCENT)
+        b.pack()
+        self.chat_canvas.update_idletasks()
+        self.chat_canvas.yview_moveto(1.0)
 
     def _send_chat(self):
         q = self.chat_input.get().strip()
@@ -423,15 +713,15 @@ class App:
 
     def _build_history_tab(self):
         tk.Label(self.tab_history, text="操作历史", bg=BG, fg=DIM,
-                 font=("", 10, "bold")).pack(anchor="w", padx=16, pady=(12, 2))
+                 font=FONT_B).pack(anchor="w", padx=16, pady=(12, 2))
         hist_frame = tk.Frame(self.tab_history, bg=BG)
         hist_frame.pack(fill="x", padx=16)
-        self.hist_list = tk.Listbox(hist_frame, bg=PANEL, fg=FG, bd=0, height=7,
+        self.hist_list = tk.Listbox(hist_frame, bg=PANEL, fg=FG, bd=0, height=6,
                                     selectbackground=ACCENT_LIGHT,
                                     selectforeground=FG,
                                     activestyle="none",
                                     highlightthickness=1, highlightbackground=BORDER,
-                                    font=("", 9))
+                                    font=FONT_S)
         hscroll = tk.Scrollbar(hist_frame, command=self.hist_list.yview, bg=PANEL2,
                                activebackground=BORDER, relief="flat", bd=0)
         self.hist_list.config(yscrollcommand=hscroll.set)
@@ -439,8 +729,8 @@ class App:
         hscroll.pack(side="right", fill="y")
 
         tk.Label(self.tab_history, text="修复备份（.minecraft/errordoctor-backups）",
-                 bg=BG, fg=DIM, font=("", 10, "bold")).pack(anchor="w", padx=16,
-                                                            pady=(12, 2))
+                 bg=BG, fg=DIM, font=FONT_B).pack(anchor="w", padx=16,
+                                                  pady=(12, 2))
         bk_frame = tk.Frame(self.tab_history, bg=BG)
         bk_frame.pack(fill="both", expand=True, padx=16, pady=(0, 6))
         self.backup_list = tk.Listbox(bk_frame, bg=PANEL, fg=FG, bd=0,
@@ -448,7 +738,7 @@ class App:
                                       selectforeground=FG,
                                       activestyle="none",
                                       highlightthickness=1, highlightbackground=BORDER,
-                                      font=("", 9))
+                                      font=FONT_S)
         bscroll = tk.Scrollbar(bk_frame, command=self.backup_list.yview, bg=PANEL2,
                                activebackground=BORDER, relief="flat", bd=0)
         self.backup_list.config(yscrollcommand=bscroll.set)
@@ -489,6 +779,7 @@ class App:
             orig = self.engine.restore(b["backup"])
             history.add("restore", f"已从备份还原 {orig}")
             self._set_status(f"已还原：{orig}")
+            self._toast(f"已从备份还原：{orig}", "ok")
             self._refresh_history()
         except Exception as e:
             messagebox.showerror("还原失败", str(e), parent=self.root)
@@ -505,7 +796,7 @@ class App:
         bar.pack(side="bottom", fill="x")
         tk.Frame(bar, bg=BORDER, height=1).pack(side="top", fill="x")
         self.status = tk.Label(bar, text="启动中…", bg=PANEL, fg=DIM,
-                               anchor="w", font=("", 9), padx=12, pady=4)
+                               anchor="w", font=FONT_S, padx=12, pady=4)
         self.status.pack(fill="x")
 
     def _set_status(self, text):
@@ -528,17 +819,18 @@ class App:
         self.settings_win = w
 
         def section(text):
-            tk.Label(w, text=text, bg=BG, fg=ACCENT, font=("", 10, "bold")).pack(
-                anchor="w", padx=18, pady=(12, 4))
+            tk.Frame(w, bg=BORDER, height=1).pack(fill="x", padx=18, pady=(10, 0))
+            tk.Label(w, text=text, bg=BG, fg=ACCENT, font=FONT_B).pack(
+                anchor="w", padx=18, pady=(6, 2))
 
         def row_label(text):
-            tk.Label(w, text=text, bg=BG, fg=DIM, font=("", 9)).pack(
+            tk.Label(w, text=text, bg=BG, fg=DIM, font=FONT_S).pack(
                 anchor="w", padx=18, pady=(6, 2))
 
         def make_entry(value="", show=None):
             e = tk.Entry(w, bg=LOG_BG, fg=FG, insertbackground=FG, relief="flat",
                          bd=0, highlightthickness=1, highlightbackground=BORDER,
-                         highlightcolor=ACCENT, font=("Consolas", 10))
+                         highlightcolor=ACCENT, font=MONO)
             e.pack(fill="x", padx=18, ipady=6)
             if show:
                 e.config(show=show)
@@ -554,18 +846,21 @@ class App:
         sv["pcl"] = make_entry(self.cfg.get("pcl_dir", ""))
         pcl_row = tk.Frame(w, bg=BG)
         pcl_row.pack(fill="x", padx=18, pady=(6, 0))
-        self._make_button(pcl_row, "🔎 自动检测", lambda: self._autodetect("pcl")).pack(side="left")
+        self._make_button(pcl_row, "🔎 自动检测", lambda: self._autodetect("pcl"),
+                          tip="从本机定位 PCL 文件夹").pack(side="left")
         tk.Label(pcl_row, text="检测不到时：打开 PCL2 软件，TotemFix 会自动定位",
-                 bg=BG, fg=DIM, font=("", 8)).pack(side="left", padx=8)
+                 bg=BG, fg=DIM, font=FONT_S).pack(side="left", padx=8)
 
         row_label("Minecraft 文件夹（.minecraft）")
         sv["mc"] = make_entry(self.cfg.get("mc_dir", ""))
         mc_btns = tk.Frame(w, bg=BG)
         mc_btns.pack(fill="x", padx=18, pady=(6, 0))
         self._make_button(mc_btns, "🔎 从 PCL 配置检测",
-                          self._detect_mc_fast).pack(side="left")
+                          self._detect_mc_fast,
+                          tip="优先读取 PCL 日志与设置里的游戏文件夹").pack(side="left")
         self.btn_full_scan = self._make_button(mc_btns, "💾 全盘扫描所有 .minecraft",
-                                               self._full_scan_mc)
+                                               self._full_scan_mc,
+                                               tip="扫描全部磁盘，列出所有 .minecraft 供选择")
         self.btn_full_scan.pack(side="left", padx=8)
 
         row_label("检测到的 Minecraft 文件夹（双击选择，附完整路径）：")
@@ -573,14 +868,14 @@ class App:
                                      selectbackground=ACCENT_LIGHT,
                                      selectforeground=FG, activestyle="none",
                                      highlightthickness=1, highlightbackground=BORDER,
-                                     font=("Consolas", 9))
+                                     font=MONO_S)
         self.mc_listbox.pack(fill="x", padx=18)
         self.mc_listbox.bind("<Double-Button-1>", lambda e: self._use_mc_candidate())
         mc_use = tk.Frame(w, bg=BG)
         mc_use.pack(fill="x", padx=18, pady=(6, 0))
         self._make_button(mc_use, "使用所选", self._use_mc_candidate).pack(side="left")
         tk.Label(mc_use, text="全盘扫描约需 10~60 秒",
-                 bg=BG, fg=DIM, font=("", 8)).pack(side="left", padx=8)
+                 bg=BG, fg=DIM, font=FONT_S).pack(side="left", padx=8)
 
         # ---- AI 设置
         section("🤖 DeepSeek 设置")
@@ -588,13 +883,13 @@ class App:
         sv["key"] = make_entry("", show="*")
         if self.cfg.get("api_key"):
             tk.Label(w, text="（已配置，留空表示保持不变）", bg=BG, fg=DIM,
-                     font=("", 8)).pack(anchor="w", padx=18)
+                     font=FONT_S).pack(anchor="w", padx=18)
         row_label("API 地址（OpenAI 兼容，默认官方）")
         sv["base"] = make_entry(self.cfg.get("api_base", ""))
         row_label("模型")
         sv["model"] = make_entry(self.cfg.get("model", ""))
         tk.Label(w, text="deepseek-chat（推荐）或 deepseek-reasoner（推理更强）",
-                 bg=BG, fg=DIM, font=("", 8)).pack(anchor="w", padx=18)
+                 bg=BG, fg=DIM, font=FONT_S).pack(anchor="w", padx=18)
 
         # ---- 行为设置
         section("⚙️ 行为设置")
@@ -617,7 +912,7 @@ class App:
         int_row = tk.Frame(w, bg=BG)
         int_row.pack(fill="x", padx=18, pady=(4, 0))
         tk.Label(int_row, text="后台监控间隔（秒）：", bg=BG, fg=DIM,
-                 font=("", 9)).pack(side="left")
+                 font=FONT_S).pack(side="left")
         tk.Spinbox(int_row, from_=1, to=60, textvariable=sv["interval"], width=5,
                    bg=LOG_BG, fg=FG, bd=0, relief="flat",
                    highlightthickness=1, highlightbackground=BORDER,
@@ -634,7 +929,6 @@ class App:
         self._fill_mc_list(config.detect_mc_dirs(self.cfg.get("pcl_dir", "")))
 
     def _fill_mc_list(self, dirs):
-        """把候选目录填入设置页列表；已使用的标记 ✓。"""
         self._mc_candidates = list(dirs or [])
         current = (self.cfg.get("mc_dir") or "").rstrip("\\/")
         if getattr(self, "mc_listbox", None) and self.mc_listbox.winfo_exists():
@@ -713,6 +1007,7 @@ class App:
         history.add("config", "已更新设置")
         self._update_watch_label()
         self._set_status("设置已保存")
+        self._toast("设置已保存", "ok")
         if self.settings_win:
             self.settings_win.destroy()
             self.settings_win = None
@@ -759,27 +1054,27 @@ class App:
         self.confirm_win = w
 
         tk.Label(w, text="🤖 AI 已分析完成，将执行以下修复：", bg=BG, fg=ACCENT,
-                 font=("", 12, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
+                 font=("Microsoft YaHei UI", 12, "bold")).pack(anchor="w", padx=18, pady=(14, 6))
 
         box = tk.Text(w, bg=PANEL, fg=FG, relief="flat", bd=0, wrap="word",
-                      height=11, font=("", 10),
+                      height=11, font=FONT,
                       highlightthickness=1, highlightbackground=BORDER)
         box.pack(fill="both", expand=True, padx=18)
         self.confirm_text = box
         icons = {"delete": "🗑 删除", "rename": "🔄 重命名", "edit": "✏️ 替换文本",
                  "write": "📝 写入文件"}
-        for title, item in plans:
+        for _title, item in plans:
             box.insert("end", f"· {icons.get(item.get('action'), '修改')} "
                               f"{item.get('path', '')}\n", "code")
             if item.get("reason"):
                 box.insert("end", f"   {item['reason']}\n", "dim")
-        box.tag_configure("code", foreground=CODE, font=("Consolas", 10))
-        box.tag_configure("dim", foreground=DIM, font=("", 9))
+        box.tag_configure("code", foreground=CODE, font=MONO)
+        box.tag_configure("dim", foreground=DIM, font=FONT_S)
         box.config(state="disabled")
 
         tk.Label(w, text="⚠️ 执行前会自动备份原文件到 .minecraft/errordoctor-backups/，"
                          "可随时在“历史与备份”页还原。",
-                 bg=BG, fg=YELLOW, font=("", 9), wraplength=600,
+                 bg=BG, fg=YELLOW, font=FONT_S, wraplength=600,
                  justify="left").pack(anchor="w", padx=18, pady=6)
 
         self.confirm_noask = tk.BooleanVar(value=False)
@@ -787,7 +1082,7 @@ class App:
                        variable=self.confirm_noask, bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
                        highlightthickness=0, bd=0,
-                       font=("", 10)).pack(anchor="w", padx=18, pady=(4, 8))
+                       font=FONT).pack(anchor="w", padx=18, pady=(4, 8))
 
         bar = tk.Frame(w, bg=BG)
         bar.pack(fill="x", padx=18, pady=(0, 14))
@@ -911,6 +1206,7 @@ class App:
         self._update_watch_label()
         history.add("config", "检测到 PCL2 已启动，自动定位 PCL 文件夹", pcl_dir)
         self._popup_window(f"✅ 检测到 PCL2 已启动，已自动定位：\n{pcl_dir}")
+        self._toast("检测到 PCL2 已启动，已自动定位 PCL 文件夹", "ok")
         self._set_status(f"检测到 PCL2 正在运行，PCL 文件夹：{pcl_dir}")
         self.engine.scan("startup")
 
@@ -925,6 +1221,7 @@ class App:
             self._set_status("全盘扫描失败：" + ev["error"])
             return
         self._set_status(f"全盘扫描完成：找到 {len(dirs)} 个 .minecraft 文件夹")
+        self._toast(f"全盘扫描完成：找到 {len(dirs)} 个 .minecraft", "ok")
         if getattr(self, "settings_win", None) and self.settings_win.winfo_exists():
             self._fill_mc_list(dirs)
         else:
@@ -939,38 +1236,14 @@ class App:
         stats = res["stats"]
         self._set_status(f"扫描完成（{ev['reason']}）：发现 {stats['issue_count']} 个问题 · "
                          f"{stats['scanned_at']}")
+        if stats["issue_count"]:
+            self._toast(f"扫描完成：发现 {stats['issue_count']} 个问题", "warn")
         if ev["reason"] in ("startup", "manual", "watch"):
             history.add("scan",
                         f"扫描完成，发现 {stats['issue_count']} 个问题"
                         + ("" if not res["errors"] else "（存在路径未配置提示）"))
         if res["errors"] and ev["reason"] in ("startup", "manual"):
             self.issue_hint.config(text="提示：" + "；".join(res["errors"]))
-
-    def _render_issue_list(self):
-        self.issue_list.delete(0, "end")
-        self._issue_index = {}
-        for n, it in enumerate(self.issues):
-            color = SEV_COLOR.get(it["severity"], DIM)
-            label = f"【{it['severity_text']}】{it['title'][:70]}"
-            self.issue_list.insert("end", label)
-            self.issue_list.itemconfig(n, fg=color)
-            self._issue_index[n] = it
-        n = len(self.issues)
-        if n:
-            self.issue_count_lbl.config(text=f" {n} ", bg=ACCENT)
-        else:
-            self.issue_count_lbl.config(text="", bg=PANEL)
-        if not self.issues:
-            self.issue_hint.config(text="🎉 未发现明显报错。后台持续监控中，"
-                                        "出现新报错会自动弹出分析窗口。")
-            self._select_issue(None)
-        else:
-            self.issue_hint.config(text=f"共 {n} 个问题，双击可直接 AI 分析")
-
-    def _on_issue_select(self, _ev=None):
-        sel = self.issue_list.curselection()
-        if sel:
-            self._select_issue(self._issue_index.get(sel[0]))
 
     def _select_issue(self, issue):
         self.selected_sig = issue["sig"] if issue else None
@@ -981,22 +1254,26 @@ class App:
             self.d_log.config(state="normal")
             self.d_log.delete("1.0", "end")
             self.d_log.config(state="disabled")
-            self._set_analysis_text("")
+            self._render_analysis(None)
             self._clear_plan_frame()
-            return
-        self.d_empty.lower()
-        self.d_title.config(text=f"{issue['kind']} · {issue['title']}")
-        self.d_meta.config(text=f"{issue['source']}（第 {issue['line']} 行）\n{issue['path']}")
-        self.d_log.config(state="normal")
-        self.d_log.delete("1.0", "end")
-        self.d_log.insert("1.0", issue["excerpt"])
-        self.d_log.config(state="disabled")
-        rec = self.analyses.get(issue["sig"])
-        if rec:
-            self._render_analysis(rec)
         else:
-            self._set_analysis_text("尚未分析。点击上方“🤖 AI 分析此报错”。")
-            self._clear_plan_frame()
+            self.d_empty.lower()
+            self.d_title.config(text=f"{issue['kind']} · {issue['title']}")
+            self.d_meta.config(text=f"{issue['source']}（第 {issue['line']} 行）\n{issue['path']}")
+            self.d_log.config(state="normal")
+            self.d_log.delete("1.0", "end")
+            self.d_log.insert("1.0", issue["excerpt"])
+            self.d_log.config(state="disabled")
+            rec = self.analyses.get(issue["sig"])
+            if rec:
+                self._render_analysis(rec)
+            else:
+                self._render_analysis(None)
+                self._analysis_section("💡", "提示",
+                                       "尚未分析。点击上方“🤖 AI 分析此报错”。",
+                                       fg=DIM)
+                self._clear_plan_frame()
+        self._refresh_card_states()
 
     def _current_issue(self):
         if not self.selected_sig:
@@ -1012,7 +1289,9 @@ class App:
             self._ask_settings("需要先配置 DeepSeek API Key 才能进行 AI 分析。")
             return
         self.btn_analyze.config(state="disabled", text="⏳ 分析中…")
-        self._set_analysis_text("AI 分析中，请稍候（约 10~60 秒）…")
+        self._render_analysis(None)
+        self._analysis_section("⏳", "AI 分析中", "正在请求 DeepSeek，约 10~60 秒…",
+                               fg=DIM)
         self.engine.analyze([issue])
 
     def _analyze_all(self):
@@ -1035,29 +1314,10 @@ class App:
             self._render_analysis(self.analyses[sig])
         self.btn_analyze.config(state="normal", text="🤖 AI 分析此报错")
 
-    def _render_analysis(self, rec):
-        if rec.get("error"):
-            self._set_analysis_text(f"❌ {rec['error']}", tags=[("err", "1.0", "end")])
-            self._clear_plan_frame()
-            return
-        conf = {"high": "高", "medium": "中", "low": "低"}.get(rec.get("confidence"), "中")
-        lines = []
-        lines.append("📋 总结\n" + (rec.get("summary") or "（无）"))
-        lines.append("\n\n🔍 出错原因\n" + (rec.get("cause") or "（无）"))
-        ef = rec.get("error_file") or ""
-        lines.append("\n\n📁 出错文件位置\n" + (ef if ef else "（AI 未能定位到具体文件）"))
-        steps = rec.get("solution_steps") or []
-        if steps:
-            lines.append("\n\n✅ 解决办法")
-            for i, s in enumerate(steps, 1):
-                lines.append(f"\n{i}. {s}")
-        lines.append(f"\n\n🎯 置信度：{conf}")
-        text = "".join(lines)
-        self._set_analysis_text(text, tags=[("h", "1.0", "1.end")])
-        self._render_plan(rec)
-
     def _on_analyze_done(self, ev):
         self._set_status(f"AI 分析完成：成功 {ev['ok_count']} / 失败 {ev['fail_count']}")
+        self._toast(f"AI 分析完成：成功 {ev['ok_count']} / 失败 {ev['fail_count']}",
+                    "ok" if ev["ok_count"] else "err")
         history.add("analyze", f"AI 分析完成：成功 {ev['ok_count']}，失败 {ev['fail_count']}")
         if not self.auto_round_sigs:
             return
@@ -1092,6 +1352,8 @@ class App:
                            for r in res["results"])
         history.add("fix", f"AI 修复完成 {ok}/{res['total']} 项", detail)
         self._set_status(f"修复完成 {ok}/{res['total']} 项（已自动备份，可还原）")
+        self._toast(f"修复完成 {ok}/{res['total']} 项（已自动备份，可还原）",
+                    "ok" if ok == res["total"] else "warn")
         messagebox.showinfo("修复完成",
                             f"已执行 {ok}/{res['total']} 项修复：\n\n{detail}\n\n"
                             "所有修改前均已自动备份，可在“历史与备份”页还原。",
@@ -1102,15 +1364,10 @@ class App:
         self._render_issue_list()
         n = len(issues)
         self._popup_window(f"⚠️ 检测到 {n} 个新报错！")
+        self._toast(f"检测到 {n} 个新报错，开始自动处理…", "warn")
         self._set_status(f"发现 {n} 个新报错，开始自动处理…")
         history.add("scan", f"检测到 {n} 个新报错",
                     "；".join(i["title"][:60] for i in issues))
-        self.issue_list.selection_clear(0, "end")
-        for idx, it in self._issue_index.items():
-            if it["sig"] == issues[0]["sig"]:
-                self.issue_list.selection_set(idx)
-                self.issue_list.see(idx)
-                break
         self._select_issue(issues[0])
         self._select_tab(0)
 
@@ -1153,9 +1410,11 @@ class App:
 
     def _on_conn_test(self, ev):
         if ev.get("ok"):
+            self._toast("DeepSeek 连接正常：" + (ev.get("reply") or "")[:60], "ok")
             messagebox.showinfo("连接成功", "DeepSeek 连接正常！\n回复：" + ev.get("reply", ""),
                                 parent=self.root)
         else:
+            self._toast("DeepSeek 连接失败", "err")
             messagebox.showerror("连接失败", ev.get("error", ""), parent=self.root)
         self._set_status("DeepSeek 连接测试完成")
 
@@ -1202,7 +1461,7 @@ class App:
             w.transient(self.root)
             center(w, 760, 480)
             t = tk.Text(w, bg=LOG_BG, fg=FG, relief="flat", bd=0,
-                        wrap="none", font=("Consolas", 9),
+                        wrap="none", font=MONO_S,
                         highlightthickness=1, highlightbackground=BORDER)
             t.insert("1.0", text + ("\n\n…（仅显示前 200KB）" if size > 200 * 1024 else ""))
             t.config(state="disabled")

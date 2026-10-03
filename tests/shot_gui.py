@@ -102,8 +102,6 @@ if app.confirm_win:
     app._confirm_result(True)
 pump(3.0)   # 修复执行 + 重新扫描
 if app.issues:
-    app.issue_list.selection_set(0)
-    app._on_issue_select()
     app._select_issue(app.issues[0])
 pump(1.0)
 shot("2-主界面详情")

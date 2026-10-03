@@ -95,11 +95,11 @@ app = gui.App(cfg)
 pump(app, 2.5)
 
 check("启动扫描发现问题", len(app.issues) >= 1, f"({len(app.issues)} 个)")
-check("问题列表已渲染", app.issue_list.size() >= 1)
+check("问题卡片已渲染", len(app.issue_cards) >= 1)
 check("自动分析已启动/完成",
-      wait_cond(lambda: app.analyses or app.confirm_win, app, 6))
-check("确认弹窗已弹出", app.confirm_win is not None)
-if app.confirm_win:
+      wait_cond(lambda: app.analyses or getattr(app, "confirm_win", None), app, 6))
+check("确认弹窗已弹出", getattr(app, "confirm_win", None) is not None)
+if getattr(app, "confirm_win", None):
     check("弹窗列出修复项",
           "config.txt" in app.confirm_text.get("1.0", "end"))
     app.confirm_noask.set(True)          # 勾选“下次不再询问”
@@ -122,7 +122,7 @@ new_seen = wait_cond(lambda: any(
     ("second error" in i["title"]) for i in app.issues), app, 6)
 check("新报错被检测", new_seen)
 check("全自动执行（无确认弹窗）", wait_cond(
-    lambda: app.confirm_win is None and any(
+    lambda: getattr(app, "confirm_win", None) is None and any(
         "自动执行" in str(m) or "修复" in str(m) for m in _msgs), app, 6))
 
 print("== 场景 3：内嵌 AI 问答 ==")
@@ -130,7 +130,7 @@ app._select_tab(1)
 app.chat_input.insert(0, "怎么装光影？")
 app._send_chat()
 check("AI 问答回复", wait_cond(
-    lambda: "模拟回复：怎么装光影？" in app.chat_text.get("1.0", "end"), app, 6))
+    lambda: "模拟回复：怎么装光影？" in app.chat_content, app, 6))
 
 print("== 场景 4：设置弹窗、候选 .minecraft 列表与保存 ==")
 app._open_settings()
