@@ -69,6 +69,14 @@ class KnowledgeTest(unittest.TestCase):
         hits = knowledge.match("Failed to load resource pack: 资源包加载失败")
         self.assertEqual(hits[0]["id"], "resource-pack-fail")
 
+    def test_match_jvm_crash(self):
+        hits = knowledge.match("A fatal error has been detected, hs_err_pid")
+        self.assertEqual(hits[0]["id"], "jvm-crash")
+
+    def test_match_main_class(self):
+        hits = knowledge.match("Could not find or load main class")
+        self.assertEqual(hits[0]["id"], "main-class-missing")
+
     def test_no_match(self):
         self.assertEqual(knowledge.match("今天天气不错，游戏正常运行"), [])
 

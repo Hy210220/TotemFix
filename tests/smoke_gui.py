@@ -173,8 +173,13 @@ if app.settings_win:
     app.sv["mc"].delete(0, "end")
     app.sv["mc"].insert(0, MC)
     app.sv["key"].insert(0, "sk-newkey123")
+    app.sv["autofix"].set(False)          # 设置页开关 → 顶栏联动
     app._save_settings()
 check("设置已保存", cfg["api_key"] == "sk-newkey123")
+check("设置页自动修复开关联动", cfg["autofix"] is False
+      and app.autofix_var.get() is False)
+cfg["autofix"] = True                     # 恢复，供后续场景使用
+app.autofix_var.set(True)
 
 print("== 场景 4.5：检测到 PCL2 启动 → 自动定位并扫描 ==")
 cfg["pcl_dir"] = ""          # 模拟尚未定位

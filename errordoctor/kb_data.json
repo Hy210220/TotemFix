@@ -349,6 +349,34 @@
         "服务器提示“requires downloading resource pack”时等待下载完成或检查网络"
       ],
       "source": "https://ask.csdn.net/questions/8802669"
+    },
+    {
+      "id": "jvm-crash",
+      "title": "JVM 崩溃：hs_err_pid 日志 / A fatal error has been detected",
+      "patterns": ["hs_err_pid", "A fatal error has been detected", "Problematic frame", "Native frames"],
+      "category": "通用崩溃",
+      "cause": "Java 虚拟机自身崩溃（Native 层），常见于显卡驱动、Java 版本与系统不兼容、内存条故障。",
+      "solution": [
+        "打开游戏目录下最新的 hs_err_pid*.log，查看 Problematic frame 定位崩溃模块",
+        "更新或回退显卡驱动；更换 PCL2 中使用的 Java 版本",
+        "关闭光影与高清材质降低显卡负载后重试",
+        "反复随机崩溃时检查内存（Windows 内存诊断）"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "main-class-missing",
+      "title": "找不到主类：Could not find or load main class",
+      "patterns": ["Could not find or load main class", "找不到或无法加载主类", "ClassDefNotFound"],
+      "category": "Java 版本",
+      "cause": "版本文件损坏（jar 不完整）、Java 版本选择错误，或游戏文件被清理/被杀软删除。",
+      "solution": [
+        "在 PCL2 版本设置中更换正确的 Java 版本",
+        "在版本管理里“修复”该版本（重新下载缺失的 jar）",
+        "检查杀毒软件是否删除了 .minecraft 下文件（看隔离区并还原）",
+        "修复无效时删除该版本文件夹后重新安装"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
     }
   ]
 }

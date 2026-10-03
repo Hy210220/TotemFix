@@ -47,6 +47,15 @@ LOG_BG = "#F0F5FA"
 
 SEV_COLOR = {100: RED, 90: "#C96A2E", 80: YELLOW, 70: BLUE, 60: BLUE, 50: DIM}
 
+# 资料库分类徽章配色（OpenFrp 语义色）
+CATEGORY_COLOR = {
+    "显卡驱动": RED, "显卡": RED, "光影": "#9C5BD1",
+    "内存": GREEN, "联机": BLUE, "网络": "#3E8FB0",
+    "Mod 冲突": "#C96A2E", "Mod 安装": "#C96A2E", "资源包": "#C96A2E",
+    "Java 版本": "#3E8FB0", "系统环境": "#7A8794", "账号": "#C96A2E",
+    "存档": "#B07A1F", "通用崩溃": RED,
+}
+
 # 字体规范（Windows 使用微软雅黑，其他平台自动回退）
 FONT = ("Microsoft YaHei UI", 10)
 FONT_B = ("Microsoft YaHei UI", 11, "bold")
@@ -387,6 +396,9 @@ class App:
                 p.tkraise()
         self.current_page = idx
         self._refresh_nav()
+        names = ("报错检测", "AI 问答", "历史与备份")
+        if idx < len(names):
+            self._set_status(f"当前页面：{names[idx]}")
 
     def _select_tab(self, idx):
         """兼容旧调用：0=报错检测 1=AI 问答 2=历史与备份。"""
@@ -578,7 +590,8 @@ class App:
             head.pack(fill="x", padx=12, pady=(8, 0))
             tk.Label(head, text=f"🧾 {e.get('title', '')}", bg=BG, fg=ACCENT,
                      font=FONT_B).pack(side="left")
-            tk.Label(head, text=f" {e.get('category', '')} ", bg=BLUE,
+            cat = e.get("category", "")
+            tk.Label(head, text=f" {cat} ", bg=CATEGORY_COLOR.get(cat, BLUE),
                      fg="#FFFFFF", font=FONT_SB).pack(side="left", padx=8)
             tk.Label(card, text=e.get("cause", ""), bg=BG, fg=FG, font=FONT,
                      justify="left", anchor="w", wraplength=600).pack(
@@ -960,7 +973,7 @@ class App:
     def _set_status(self, text):
         try:
             self.status.config(text=text)
-        except tk.TclError:
+        except (tk.TclError, AttributeError):
             pass
 
     # ================================================================ 设置弹窗
@@ -1053,12 +1066,17 @@ class App:
         section("⚙️ 行为设置")
         sv["ask"] = tk.BooleanVar(value=bool(self.cfg.get("ask_before_fix", True)))
         sv["auto_analyze"] = tk.BooleanVar(value=bool(self.cfg.get("auto_analyze", True)))
+        sv["autofix"] = tk.BooleanVar(value=bool(self.cfg.get("autofix", True)))
         sv["hide"] = tk.BooleanVar(value=bool(self.cfg.get("hide_on_close", True)))
         sv["interval"] = tk.StringVar(value=str(self.cfg.get("watch_interval", 3)))
+        tk.Checkbutton(w, text="检测到报错后自动修复（与顶栏“自动修复”开关联动）",
+                       variable=sv["autofix"], bg=BG, fg=FG,
+                       activebackground=BG, selectcolor=BG,
+                       highlightthickness=0, bd=0).pack(anchor="w", padx=18, pady=(4, 0))
         tk.Checkbutton(w, text="修改文件前弹窗确认（弹窗内可勾选“下次不再询问”）",
                        variable=sv["ask"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
-                       highlightthickness=0, bd=0).pack(anchor="w", padx=18, pady=(4, 0))
+                       highlightthickness=0, bd=0).pack(anchor="w", padx=18)
         tk.Checkbutton(w, text="发现报错后自动调用 AI 分析",
                        variable=sv["auto_analyze"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
@@ -1164,6 +1182,8 @@ class App:
         self.cfg["model"] = self.sv["model"].get().strip() or "deepseek-chat"
         self.cfg["ask_before_fix"] = bool(self.sv["ask"].get())
         self.cfg["auto_analyze"] = bool(self.sv["auto_analyze"].get())
+        self.cfg["autofix"] = bool(self.sv["autofix"].get())
+        self.autofix_var.set(self.cfg["autofix"])
         self.cfg["hide_on_close"] = bool(self.sv["hide"].get())
         try:
             self.cfg["watch_interval"] = max(1, min(60, int(self.sv["interval"].get())))
