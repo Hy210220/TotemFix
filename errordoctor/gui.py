@@ -533,6 +533,8 @@ class App:
                           tip="在资源管理器中定位该日志/崩溃报告").pack(side="left", padx=8)
         self._make_button(btns, "📄 预览文件", self._preview_file,
                           tip="直接查看该日志文件内容").pack(side="left")
+        self._make_button(btns, "📋 复制日志", self._copy_log,
+                          tip="把日志摘要复制到剪贴板，方便粘贴给朋友或 AI").pack(side="left", padx=8)
         self._make_button(btns, "🤖 分析全部问题", self._analyze_all,
                           tip="依次分析列表中的全部报错").pack(side="right")
 
@@ -795,6 +797,8 @@ class App:
         self.chat_input.bind("<Return>", lambda e: self._send_chat())
         self._make_button(bar, "发送 ⏎", self._send_chat, primary=True,
                           tip="回车或点击发送").pack(side="left", padx=(8, 0))
+        self._make_button(bar, "🗑 清空", self._clear_chat, danger=True,
+                          tip="清空当前对话记录").pack(side="left", padx=(8, 0))
 
         self._chat_append("sys", "你好！我是内嵌的 Minecraft 故障排查助手（DeepSeek 驱动）。\n"
                                  "可以把报错日志粘贴给我，或直接描述问题，例如：“进游戏就闪退怎么办？”")
@@ -825,11 +829,19 @@ class App:
         self.chat_canvas.update_idletasks()
         self.chat_canvas.yview_moveto(1.0)
 
+    def _clear_chat(self):
+        """清空对话气泡、历史与纯文本累积，恢复欢迎语。"""
+        for w in self.chat_inner.winfo_children():
+            w.destroy()
+        self.chat_history = []
+        self.chat_content = ""
+        self._chat_append("sys", "对话已清空。可以把报错日志粘贴给我，"
+                                 "或直接描述问题，例如：“进游戏就闪退怎么办？”")
+
     def _send_chat(self):
         q = self.chat_input.get().strip()
         if not q:
-            return
-        self.chat_input.delete(0, "end")
+            return        self.chat_input.delete(0, "end")
         self.chat_history.append({"role": "user", "content": q})
         self._chat_append("user", q)
         self._chat_append("sys", "AI 思考中…")
@@ -1554,6 +1566,21 @@ class App:
             self._open_settings()
 
     # ------------------------------------------------ 文件操作
+
+    def _copy_log(self):
+        """把当前问题的日志摘要复制到剪贴板。"""
+        issue = self._current_issue()
+        if issue is None:
+            messagebox.showinfo("提示", "请先在左侧选择一个报错问题。", parent=self.root)
+            return
+        text = f"[{issue['source']} 第 {issue['line']} 行]\n{issue['excerpt']}"
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self._toast("日志摘要已复制到剪贴板", "ok")
+        except tk.TclError:
+            messagebox.showinfo("提示", "复制失败，请手动选择日志文本复制。",
+                                parent=self.root)
 
     def _current_file_path(self):
         issue = self._current_issue()

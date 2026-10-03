@@ -266,6 +266,61 @@
         "PCL2 内置联机同样基于穿透，可作为零配置替代方案"
       ],
       "source": "https://www.openfrp.net/"
+    },
+    {
+      "id": "shader-optifine",
+      "title": "光影加载失败/黑屏：OptiFine 或 Iris 冲突",
+      "patterns": ["OptiFine", "Iris", "shader", "光影"],
+      "category": "光影",
+      "cause": "光影包与 OptiFine/Iris 版本不匹配、显卡不支持该光影特性，或两个渲染 Mod 同时安装导致冲突。",
+      "solution": [
+        "关闭光影（视频设置 → 光影 → 关）确认游戏可正常启动",
+        "更新 OptiFine/Iris 与光影包到互相兼容的版本（看光影包发布页说明）",
+        "OptiFine 与 Iris 二选一，不要同时安装",
+        "更新显卡驱动，旧显卡尝试较低版本光影"
+      ],
+      "source": "https://ask.csdn.net/questions/8855443"
+    },
+    {
+      "id": "forge-install-fail",
+      "title": "Forge 安装失败：下载失败/安装报错",
+      "patterns": ["Failed to download", "Forge install", "Forge 安装失败", "failed to install", "Installer"],
+      "category": "Mod 安装",
+      "cause": "Forge 安装器下载失败（网络/源不可用），或高版本 Forge 与启动器安装流程不兼容。",
+      "solution": [
+        "检查网络与代理，重试安装；换用 Forge 官网或镜像源下载安装器",
+        "高版本（1.13+）安装失败时，尝试 PCL2 内「手动安装」并选择对应的安装器文件",
+        "确认选择的 Forge 版本与游戏版本、Mod 要求的 Forge 版本一致",
+        "删除 .minecraft/versions 下残留的半成品版本后重新安装"
+      ],
+      "source": "https://github.com/Meloong-Git/PCL/issues/6642"
+    },
+    {
+      "id": "java-path-invalid",
+      "title": "Java/游戏路径含中文或非法字符",
+      "patterns": ["InvalidPathException", "Illegal char", "中文路径", "路径包含中文"],
+      "category": "系统环境",
+      "cause": "游戏目录或 Java 安装路径中包含中文、空格等特殊字符，部分 Mod（如 Forge）无法处理。",
+      "solution": [
+        "把游戏目录迁移到纯英文路径（如 D:\\Minecraft\\.minecraft）",
+        "Java 安装在纯英文无空格路径（如 D:\\Java\\jdk-17）",
+        "PCL2 中重新指定迁移后的 Java 与游戏文件夹"
+      ],
+      "source": "https://blog.gitcode.com/e3566c0b91fd60311c2c8dad1ccb006c.html"
+    },
+    {
+      "id": "ms-login-fail",
+      "title": "正版登录失败：BadRequest 400 / 无法验证",
+      "patterns": ["BadRequest", "无法验证", "正版登录", "Failed to login", "登录失败"],
+      "category": "账号",
+      "cause": "微软登录接口报错：网络/代理异常、系统时间不准、或账号验证服务临时故障。",
+      "solution": [
+        "关闭系统代理与加速器后重试登录",
+        "校准系统时间（同步 Windows 时间服务器）",
+        "更换网络（如手机热点）后重新登录",
+        "稍后再试——微软登录服务偶发故障会自行恢复"
+      ],
+      "source": "https://github.com/Meloong-Git/PCL/issues/6995"
     }
   ]
 }

@@ -45,6 +45,22 @@ class KnowledgeTest(unittest.TestCase):
         hits = knowledge.match("外网进不来，需要端口映射 NAT 穿透")
         self.assertEqual(hits[0]["id"], "nat-port")
 
+    def test_match_shader(self):
+        hits = knowledge.match("OptiFine 与光影包冲突导致黑屏")
+        self.assertEqual(hits[0]["id"], "shader-optifine")
+
+    def test_match_forge_install(self):
+        hits = knowledge.match("Failed to download file, Forge install 失败")
+        self.assertEqual(hits[0]["id"], "forge-install-fail")
+
+    def test_match_java_path(self):
+        hits = knowledge.match("java.nio.file.InvalidPathException: Illegal char")
+        self.assertEqual(hits[0]["id"], "java-path-invalid")
+
+    def test_match_ms_login(self):
+        hits = knowledge.match("正版登录尝试失败：错误码 BadRequest（400）")
+        self.assertEqual(hits[0]["id"], "ms-login-fail")
+
     def test_no_match(self):
         self.assertEqual(knowledge.match("今天天气不错，游戏正常运行"), [])
 

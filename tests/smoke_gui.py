@@ -139,6 +139,23 @@ app.chat_input.insert(0, "怎么装光影？")
 app._send_chat()
 check("AI 问答回复", wait_cond(
     lambda: "模拟回复：怎么装光影？" in app.chat_content, app, 6))
+app._clear_chat()
+check("清空对话生效", "对话已清空" in app.chat_content
+      and app.chat_history == [])
+
+print("== 场景 3.5：复制日志到剪贴板 ==")
+kb_issue2 = next((i for i in app.issues if i.get("kb")), None)
+if kb_issue2:
+    app._select_issue_by_sig(kb_issue2["sig"])
+    pump(app, 0.3)
+    app._copy_log()
+    pump(app, 0.3)
+    try:
+        clip = app.root.clipboard_get()
+        check("剪贴板包含日志摘要", kb_issue2["title"][:20] in clip
+              or "GLFW" in clip)
+    except Exception as e:
+        check("剪贴板读取", False, str(e))
 
 print("== 场景 4：设置弹窗、候选 .minecraft 列表与保存 ==")
 app._open_settings()
