@@ -61,6 +61,14 @@ class KnowledgeTest(unittest.TestCase):
         hits = knowledge.match("正版登录尝试失败：错误码 BadRequest（400）")
         self.assertEqual(hits[0]["id"], "ms-login-fail")
 
+    def test_match_world_corrupt(self):
+        hits = knowledge.match("Failed to load world: level.dat 损坏")
+        self.assertEqual(hits[0]["id"], "world-corrupt")
+
+    def test_match_resource_pack(self):
+        hits = knowledge.match("Failed to load resource pack: 资源包加载失败")
+        self.assertEqual(hits[0]["id"], "resource-pack-fail")
+
     def test_no_match(self):
         self.assertEqual(knowledge.match("今天天气不错，游戏正常运行"), [])
 

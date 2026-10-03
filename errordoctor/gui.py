@@ -865,6 +865,14 @@ class App:
         self.hist_list.config(yscrollcommand=hscroll.set)
         self.hist_list.pack(side="left", fill="both", expand=True)
         hscroll.pack(side="right", fill="y")
+        self.hist_list.bind("<<ListboxSelect>>", self._on_hist_select)
+
+        # 历史详情面板：选中条目后显示 detail（如修复了哪些文件）
+        self.hist_detail = tk.Label(self.tab_history, text="点击上方历史条目查看详情",
+                                    bg=LOG_BG, fg=FG, font=FONT_S, justify="left",
+                                    anchor="nw", wraplength=700,
+                                    highlightthickness=1, highlightbackground=BORDER)
+        self.hist_detail.pack(fill="x", padx=16, pady=(6, 0))
 
         tk.Label(self.tab_history, text="修复备份（.minecraft/errordoctor-backups）",
                  bg=BG, fg=DIM, font=FONT_B).pack(anchor="w", padx=16,
@@ -893,7 +901,8 @@ class App:
 
     def _refresh_history(self):
         self.hist_list.delete(0, "end")
-        for r in history.list_records(100):
+        self._hist_records = history.list_records(100)
+        for r in self._hist_records:
             kind = {"scan": "扫描", "analyze": "分析", "fix": "修复",
                     "restore": "还原", "config": "系统", "chat": "问答"}.get(r["kind"], r["kind"])
             self.hist_list.insert("end", f"[{r['time']}] [{kind}] {r['summary']}")
@@ -902,6 +911,17 @@ class App:
         for b in self.engine.list_backups():
             self.backup_items.append(b)
             self.backup_list.insert("end", f"[{b['time']}] {b['orig']}  ({b['size']//1024}KB)")
+
+    def _on_hist_select(self, _ev=None):
+        """历史条目选中时，在详情面板显示该条的 detail。"""
+        sel = self.hist_list.curselection()
+        if not sel:
+            self.hist_detail.config(text="点击上方历史条目查看详情")
+            return
+        rec = self._hist_records[sel[0]]
+        detail = (rec.get("detail") or "").strip()
+        self.hist_detail.config(
+            text=detail if detail else "（该记录无详细内容）")
 
     def _restore_backup(self):
         sel = self.backup_list.curselection()
@@ -1055,6 +1075,15 @@ class App:
                    bg=LOG_BG, fg=FG, bd=0, relief="flat",
                    highlightthickness=1, highlightbackground=BORDER,
                    buttonbackground=PANEL2).pack(side="left")
+
+        # 关于
+        tk.Frame(w, bg=BORDER, height=1).pack(fill="x", padx=18, pady=(12, 0))
+        try:
+            kb_n = engine_mod.knowledge.entry_count()
+        except Exception:
+            kb_n = "?"
+        tk.Label(w, text=f"🧿 TotemFix v2.4 · 本地运行 · 内置资料库 {kb_n} 条 · DeepSeek 驱动",
+                 bg=BG, fg=DIM, font=FONT_S, anchor="w").pack(fill="x", padx=18, pady=(6, 0))
 
         bar = tk.Frame(w, bg=BG)
         bar.pack(fill="x", padx=18, pady=16)
@@ -1269,6 +1298,11 @@ class App:
             self.cfg["mc_dir"] = config.detect_mc_dir(self.cfg.get("pcl_dir"))
         config.save(self.cfg)
         self._update_watch_label()
+        if not self.cfg.get("api_key"):
+            self._toast("尚未配置 DeepSeek API Key，AI 分析功能需在“设置”中填写",
+                        "warn")
+            self.issue_hint.config(text="💡 提示：先在左下角“⚙️ 设置”中填写 "
+                                        "DeepSeek API Key，才能使用 AI 分析")
         self._set_status("启动自动扫描中…")
         self.engine.scan("startup")
 

@@ -321,6 +321,34 @@
         "稍后再试——微软登录服务偶发故障会自行恢复"
       ],
       "source": "https://github.com/Meloong-Git/PCL/issues/6995"
+    },
+    {
+      "id": "world-corrupt",
+      "title": "存档损坏：无法加载世界 / level.dat 损坏",
+      "patterns": ["level.dat", "无法加载世界", "Failed to load world", "tried to read NBT tag that was too big", "世界已损坏"],
+      "category": "存档",
+      "cause": "存档数据损坏：游戏崩溃/断电导致 level.dat 写坏，或存档 NBT 深度过大、被不兼容版本/Mod 写坏。",
+      "solution": [
+        "先备份整个 saves/<世界名> 文件夹再操作",
+        "把 level.dat 改名为 level.dat.bak，再把 level.dat_old 改名为 level.dat 尝试回滚",
+        "使用存档修复工具（如 MCA Selector）清理损坏区块",
+        "无法修复时回退到该世界的最近备份（或从 .minecraft/backups 恢复）"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "resource-pack-fail",
+      "title": "资源包加载失败：Failed to load resource pack",
+      "patterns": ["Failed to load resource pack", "资源包加载失败", "requires downloading resource pack", "Invalid resource pack"],
+      "category": "资源包",
+      "cause": "资源包文件损坏、下载不完整，或资源包版本与当前游戏版本不兼容。",
+      "solution": [
+        "重新下载资源包（确认下载完整、zip 可正常打开）",
+        "检查资源包是否支持当前游戏版本（看发布页说明）",
+        "临时移除资源包确认游戏可正常启动，再逐个加回定位问题包",
+        "服务器提示“requires downloading resource pack”时等待下载完成或检查网络"
+      ],
+      "source": "https://ask.csdn.net/questions/8802669"
     }
   ]
 }

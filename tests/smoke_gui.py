@@ -190,6 +190,10 @@ app._select_tab(2)
 app._refresh_history()
 check("历史有记录", app.hist_list.size() >= 1)
 check("备份列表已渲染", app.backup_list.size() >= 1)
+app.hist_list.selection_set(0)
+app._on_hist_select()
+check("历史详情面板更新",
+      app.hist_detail.cget("text") != "点击上方历史条目查看详情")
 
 app._quit()
 pump(app, 0.5)
