@@ -44,6 +44,6 @@
 ## 归档内容
 
 - `README.md`：本轮 README 完整快照；
-- `TotemFix-linux`：PyInstaller 构建的可执行程序（Linux x86-64，沙箱验证用）。
-  **Windows 版 TotemFix.exe 请用本仓库 `scripts\build.bat`（Windows+Python3.8+）
-  一键生成，或到 GitHub 仓库 Actions 手动 Run workflow 下载 artifact。**
+- `TotemFix.exe`：**Windows 64 位主程序**（GitHub Actions windows-latest 自动构建，
+  含本轮全部改动；`TotemFix.exe.sha256` 为官方 SHA256 校验侧车）；
+- `TotemFix-linux`：Linux x86-64 构建产物（沙箱验证用，非发布物）。
