@@ -5,3 +5,6 @@ build/
 dist/
 *.exe
 .venv/
+
+# 发布副本归档：允许归档目录中的 exe（每轮副本须保留主程序）
+!releases/**/*.exe

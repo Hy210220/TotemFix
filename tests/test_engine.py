@@ -198,6 +198,21 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(ev["result"]["ok"], 0)
         self.assertIn("非法", ev["result"]["results"][0]["message"])
 
+    def test_kb_attached_on_scan(self):
+        """扫描命中内置资料库时，issue 应附带 kb 条目。"""
+        with open(os.path.join(self.mc, "logs", "latest.log"), "a",
+                  encoding="utf-8") as f:
+            f.write("\n[13:00:00] GLFW error 65543: WGL: The driver does "
+                    "not appear to support OpenGL\n")
+        self.engine.scan("startup")
+        ev = wait_for(self.events, lambda e: e["type"] == "scan_done")
+        self.assertIsNotNone(ev)
+        glfw_issue = next((i for i in ev["result"]["issues"]
+                           if i.get("kb")), None)
+        self.assertIsNotNone(glfw_issue, "GLFW 报错应命中资料库")
+        self.assertEqual(glfw_issue["kb"][0]["id"], "glfw-65543")
+        self.assertIsInstance(glfw_issue["kb"][0]["solution"], list)
+
     def test_pcl_process_detected(self):
         """PCL 文件夹未定位时，监控到 PCL2 进程 → 触发 pcl_detected 事件。"""
         captured = {}

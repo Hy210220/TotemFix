@@ -5,7 +5,7 @@
 import os
 import threading
 
-from . import config, deepseek, fixer, scanner, watcher
+from . import config, deepseek, fixer, knowledge, scanner, watcher
 
 
 def _default_client_factory(cfg: dict):
@@ -79,6 +79,11 @@ class Engine:
                 self._emit({"type": "scan_error", "error": str(e)})
                 return
             issues = res["issues"]
+            # 离线资料库匹配：命中即附上已知原因与解决办法（AI 分析的补充）
+            for it in issues:
+                kb = knowledge.match(it.get("excerpt", ""))
+                if kb:
+                    it["kb"] = kb
             new = [i for i in issues if i["sig"] not in self._sigs]
             self._sigs = {i["sig"] for i in issues}
             self.issues = issues

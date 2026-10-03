@@ -26,6 +26,10 @@ EXIT_RE = re.compile(r"(?:退出代码|exit\s*code)[^\d\-]*(-?\d+)", re.I)
 
 FATAL_RE = re.compile(r"^\s*\[?(FATAL|SEVERE|CRITICAL|ERROR)\]?[:：\s]", re.I)
 
+# GLFW/OpenGL 渲染类报错（无 Exception 后缀，需单独识别）
+GLFW_RE = re.compile(r"\bGLFW error\b|\bdoes not appear to support OpenGL\b|"
+                     r"\bOpenGL context\b|WGL: ", re.I)
+
 # 读取文件的最大尾部字节数（避免超大日志拖慢扫描）
 MAX_TAIL_BYTES = 3 * 1024 * 1024
 MAX_EXCERPT_CHARS = 6000
@@ -65,6 +69,8 @@ def _classify(line: str):
     """返回 (kind, severity) 或 None。kind 为中文类别名。"""
     if EXC_RE.search(line):
         return "异常", 90
+    if GLFW_RE.search(line):
+        return "显卡异常", 90
     if CRASH_RE.search(line):
         return "崩溃", 100
     m = EXIT_RE.search(line)

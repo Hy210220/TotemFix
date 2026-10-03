@@ -20,7 +20,9 @@ with open(os.path.join(PCL, "Log1.txt"), "w", encoding="utf-8") as f:
     f.write("[10:00:00] 启动游戏\n")
 with open(os.path.join(MC, "logs", "latest.log"), "w", encoding="utf-8") as f:
     f.write("java.lang.NullPointerException: test\n"
-            "\tat net.minecraft.server.Main.main(Main.java:1)\n")
+            "\tat net.minecraft.server.Main.main(Main.java:1)\n"
+            "[12:00:00] GLFW error 65543: WGL: The driver does not appear "
+            "to support OpenGL\n")
 with open(os.path.join(MC, "config.txt"), "w", encoding="utf-8") as f:
     f.write("old\n")
 
@@ -96,6 +98,12 @@ pump(app, 2.5)
 
 check("启动扫描发现问题", len(app.issues) >= 1, f"({len(app.issues)} 个)")
 check("问题卡片已渲染", len(app.issue_cards) >= 1)
+kb_issue = next((i for i in app.issues if i.get("kb")), None)
+check("资料库离线命中", kb_issue is not None)
+if kb_issue:
+    app._select_issue_by_sig(kb_issue["sig"])
+    pump(app, 0.4)
+    check("资料库卡片已渲染", getattr(app, "kb_shown", False))
 check("自动分析已启动/完成",
       wait_cond(lambda: app.analyses or getattr(app, "confirm_win", None), app, 6))
 check("确认弹窗已弹出", getattr(app, "confirm_win", None) is not None)

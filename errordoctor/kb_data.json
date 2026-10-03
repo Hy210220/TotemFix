@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "glfw-65543",
+      "title": "GLFW error 65543：显卡/驱动无法渲染",
+      "patterns": ["GLFW error 65543", "does not appear to support OpenGL", "Failed to create the GLFW window", "Failed to locate GLFW"],
+      "category": "显卡驱动",
+      "cause": "显卡驱动过旧或损坏，或 Minecraft 使用了错误的显卡（如集成显卡）进行渲染。",
+      "solution": [
+        "到 NVIDIA/AMD/Intel 官网更新显卡驱动",
+        "在 Windows 显示设置或显卡控制面板中，把 Minecraft（javaw.exe）指定为独立显卡",
+        "在 PCL2 设置中开启“高性能显卡”选项后重新启动"
+      ],
+      "source": "https://github.com/PCL-Community/PCL2-1930"
+    },
+    {
+      "id": "exit-code-1",
+      "title": "游戏退出代码 1（Exit Code 1）",
+      "patterns": ["退出代码 1", "exit code 1", "exit code: 1", "Exit Code: 1"],
+      "category": "通用崩溃",
+      "cause": "最常见原因是 Mod 冲突或版本不匹配，其次是 Java 版本不适配、内存不足。",
+      "solution": [
+        "打开 .minecraft/crash-reports 最近一次崩溃报告，看 Description 确定崩溃点",
+        "检查各 Mod 是否与游戏版本匹配，用二分法（先禁用一半）定位冲突 Mod",
+        "1.17+ 版本使用 Java 17+，1.20.5+ 使用 Java 21",
+        "在 PCL2 设置中把分配内存调大到 4096MB 以上"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "exit-code-neg1",
+      "title": "游戏退出代码 -1：游戏进程崩溃",
+      "patterns": ["退出代码 -1", "exit code -1", "exit code: -1"],
+      "category": "通用崩溃",
+      "cause": "游戏进程自身崩溃（未产生 Java 异常）。常见：Mod 冲突、显卡驱动崩溃、内存不足。",
+      "solution": [
+        "查看 crash-reports 与 hs_err_pid*.log 定位崩溃模块",
+        "二分法排查 Mod；更新显卡驱动；调大分配内存",
+        "更换 PCL2 中的 Java 版本重试"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "oom",
+      "title": "OutOfMemoryError：内存不足",
+      "patterns": ["java.lang.OutOfMemoryError", "Java heap space", "GC overhead limit exceeded"],
+      "category": "内存",
+      "cause": "分配给游戏的内存不足，或某个 Mod/资源包存在内存泄漏。",
+      "solution": [
+        "PCL2 设置 → 游戏内存：调大到 4096MB 或更高（不要超过物理内存的 80%）",
+        "减少同时加载的高清材质包与 Mod 数量",
+        "关闭其它占用内存的程序后重启游戏"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "noclassdef",
+      "title": "NoClassDefFoundError / ClassNotFoundException：类缺失",
+      "patterns": ["NoClassDefFoundError", "ClassNotFoundException"],
+      "category": "Mod 冲突",
+      "cause": "某个 Mod 依赖的类不存在：依赖 Mod 缺失、Mod 版本不匹配或两个 Mod 冲突。",
+      "solution": [
+        "在错误信息里找到缺失的类名（通常包含 Mod 名称），定位对应 Mod",
+        "安装该 Mod 的依赖 Mod（查看其下载页说明）",
+        "更新或移除与当前游戏版本不兼容的 Mod"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "unsupported-class",
+      "title": "UnsupportedClassVersionError：Java 版本过低",
+      "patterns": ["UnsupportedClassVersionError", "has been compiled by a more recent version of the Java Runtime", "class file version"],
+      "category": "Java 版本",
+      "cause": "当前游戏/Mod 需要更高版本的 Java，而启动时使用的 Java 版本过低。",
+      "solution": [
+        "1.17+ 使用 Java 17+，1.20.5+ 使用 Java 21",
+        "在 PCL2 版本设置中手动选择正确的 Java",
+        "到 Adoptium 官网下载对应版本的 Java 后在 PCL2 中导入"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "access-violation",
+      "title": "EXCEPTION_ACCESS_VIOLATION：内存访问违规",
+      "patterns": ["EXCEPTION_ACCESS_VIOLATION", "Invalid memory access", "Failed to write core dump"],
+      "category": "显卡驱动",
+      "cause": "多为显卡驱动崩溃或 Java 版本与显卡驱动不兼容导致。",
+      "solution": [
+        "更新或回退显卡驱动",
+        "更换 PCL2 中使用的 Java 版本",
+        "关闭光影/高清材质等加重显卡负载的配置后重试"
+      ],
+      "source": "https://github.com/PCL-Community/PCL2-1930"
+    },
+    {
+      "id": "permission-denied",
+      "title": "拒绝访问：杀毒软件/文件占用",
+      "patterns": ["Access is denied", "拒绝访问", "Permission denied", "无法写入"],
+      "category": "系统环境",
+      "cause": "杀毒软件拦截，或游戏文件被其它程序占用、游戏目录无写入权限。",
+      "solution": [
+        "将 PCL2 文件夹与 .minecraft 文件夹加入杀毒软件白名单",
+        "关闭占用游戏文件的程序（如其它启动器、同步盘）",
+        "确认游戏目录所在磁盘有剩余空间，且不是只读"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "connect-fail",
+      "title": "网络连接失败/超时",
+      "patterns": ["Connection timed out", "ConnectException", "connection refused", "UnknownHostException", "无法连接"],
+      "category": "网络",
+      "cause": "网络不通、系统代理干扰、或服务器/下载源不可达。",
+      "solution": [
+        "关闭系统代理（设置 → 网络和Internet → 代理 → 关闭）",
+        "检查防火墙是否拦截了 Minecraft/PCL2 的网络访问",
+        "移动宽带用户可尝试切换网络或在 PCL2 中更换下载源"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "mod-load-fail",
+      "title": "Mod 加载失败/重复/冲突",
+      "patterns": ["Failed to load mod", "ModResolutionException", "DuplicateModsFound", "ModLoadingException"],
+      "category": "Mod 冲突",
+      "cause": "Mod 与游戏版本不匹配、存在重复 Mod 或缺少前置依赖。",
+      "solution": [
+        "按报错中列出的 Mod 名称找到对应文件，更新到匹配版本",
+        "删除重复的 Mod（同名不同版本只保留一个）",
+        "安装报错提示缺失的前置 Mod（如 Fabric API）"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "net-framework",
+      "title": "PCL2 无法启动：缺少 .NET Framework",
+      "patterns": ["0xc0000135", "需要 .NET Framework", ".NET Framework 4.6.2", "0x80070002"],
+      "category": "系统环境",
+      "cause": "系统缺少 .NET Framework 4.6.2+（Win7 或精简版系统常见），PCL2 本体无法运行。",
+      "solution": [
+        "到微软官网下载 .NET Framework 4.6.2 Runtime 安装",
+        "安装失败时先运行 Windows Update 补齐系统更新",
+        "Win10/Win11 在“启用或关闭 Windows 功能”中勾选 .NET Framework 3.5/4.8"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "antivirus",
+      "title": "文件被删除/拦截：杀毒软件误报",
+      "patterns": ["已被删除", "Defender", "检测到威胁", "已被隔离", "Trojan"],
+      "category": "系统环境",
+      "cause": "杀毒软件把 Minecraft 相关文件误判为威胁并删除/隔离。",
+      "solution": [
+        "将 PCL2 文件夹与 .minecraft 文件夹整体加入杀毒软件白名单",
+        "在 Windows Defender 的“保护历史记录”中还原被隔离的文件",
+        "使用官方渠道重新下载被删除的文件"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/launch-failure/"
+    },
+    {
+      "id": "pcl-link-fail",
+      "title": "PCL2 联机失败：无法加入联机房间",
+      "patterns": ["联机失败", "加入联机", "联机房间", "联机码"],
+      "category": "联机",
+      "cause": "PCL2 内置联机依赖内网穿透节点，常见原因：双方游戏版本或 Mod 不一致、网络节点拥堵、端口被占用。",
+      "solution": [
+        "确认双方 Minecraft 版本、Mod（含 Forge/Fabric 版本）完全一致",
+        "PCL2 联机设置中更换其它线路/节点后重试",
+        "检查 25565 等端口未被占用，关闭占用程序",
+        "联机不可用时改用内网穿透工具（OpenFrp/SakuraFrp）映射端口后直连"
+      ],
+      "source": "https://pcl2.ijinshan.com/pages/tutorial/lan-play/"
+    },
+    {
+      "id": "lan-not-found",
+      "title": "局域网联机：搜不到房间/无法加入局域网世界",
+      "patterns": ["局域网联机", "找不到联机房间", "LAN 联机", "无法加入局域网世界"],
+      "category": "联机",
+      "cause": "同一路由器下仍搜不到房间，通常是 AP 隔离（访客网络）、不同网段、防火墙拦截或游戏版本不一致。",
+      "solution": [
+        "确认两台电脑连的是同一个路由器且未开启“访客网络/AP 隔离”",
+        "在 Windows 防火墙中允许 javaw.exe 通过（专用网络）",
+        "双方游戏版本必须完全一致；模组版本不一致也会搜不到",
+        "手动输入“IP:端口”（局域网对局域网）加入，端口见聊天栏提示"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "port-in-use",
+      "title": "端口被占用：Address already in use / 25565",
+      "patterns": ["Address already in use", "BindException", "端口被占用", "25565"],
+      "category": "联机",
+      "cause": "开服或联机时目标端口（默认 25565）已被其它程序占用，或重复开启了两个服务器。",
+      "solution": [
+        "检查是否重复开启了服务器/游戏，关闭多余进程",
+        "在服务器配置文件 server.properties 中修改 server-port 为其它端口",
+        "用命令 netstat -ano | findstr 25565 查看占用进程并结束它",
+        "确保防火墙/杀毒软件没有占用或拦截该端口"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "invalid-session",
+      "title": "正版验证失败：Invalid session / Failed to verify username",
+      "patterns": ["Invalid session", "Failed to verify username", "验证用户名失败", "会话无效"],
+      "category": "联机",
+      "cause": "用离线（盗版）账号进入了开启正版验证的服务器，或正版登录状态已过期。",
+      "solution": [
+        "该服务器开启了正版验证：更换离线服，或使用正版账号登录",
+        "正版玩家请退出账号重新登录刷新会话",
+        "自建服务器可在 server.properties 中把 online-mode 改为 false（仅限局域网/信任环境）"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "server-mod-mismatch",
+      "title": "服务器 Mod 不一致：mod list mismatch / 被拒绝加入",
+      "patterns": ["Server mod rejections", "mod list mismatch", "Missing mods", "excess mods", "服务器 Mod 不一致"],
+      "category": "联机",
+      "cause": "客户端安装的 Mod 与服务器要求不一致：缺少必装 Mod、多装了服务器不允许的 Mod 或版本不同。",
+      "solution": [
+        "对照服务器整合包/公告安装完全一致的 Mod 列表",
+        "删除服务器不允许的多余 Mod（报错中的 excess mods）",
+        "补齐服务器要求的 Mod（报错中的 Missing mods）及正确版本",
+        "Fabric 服务器需注意 Fabric API 等前置 Mod 版本匹配"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "outdated-client",
+      "title": "客户端/服务器版本不匹配：Outdated client",
+      "patterns": ["Outdated client", "Outdated server", "不兼容的客户端版本", "version mismatch"],
+      "category": "联机",
+      "cause": "客户端游戏版本与服务器版本不一致（如 1.20.1 客户端连 1.21 服务器）。",
+      "solution": [
+        "把游戏版本切换为与服务器完全相同的版本后重连",
+        "PCL2 中安装对应版本的客户端（版本列表选择后启动）",
+        "自建服务器可更换服务器核心版本以适配客户端"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "remote-closed",
+      "title": "被服务器断开：远程主机强迫关闭 / Connection reset",
+      "patterns": ["远程主机强迫关闭了一个现有的连接", "Internal Exception: java.io.IOException", "Connection reset by peer"],
+      "category": "联机",
+      "cause": "最常见是客户端与服务器版本/Mod 不一致被服务端主动断开，其次是网络不稳定。",
+      "solution": [
+        "核对双方游戏版本与 Mod 是否完全一致（先看版本，再看 Mod）",
+        "检查网络稳定性：关闭下载、代理、加速器后重试",
+        "查看服务器日志确认断开原因（服主侧）"
+      ],
+      "source": "https://zh.minecraft.wiki/"
+    },
+    {
+      "id": "nat-port",
+      "title": "外网连不进服务器：需要端口映射/内网穿透",
+      "patterns": ["端口映射", "Port forwarding", "NAT", "内网穿透", "公网 IP"],
+      "category": "联机",
+      "cause": "家庭宽带大多没有独立公网 IP，外网玩家无法直连本机服务器端口。",
+      "solution": [
+        "使用免费内网穿透工具（如 OpenFrp、SakuraFrp）映射 25565/TCP 端口，把映射地址发给好友",
+        "有公网 IP 时在路由器中做端口转发：25565 TCP → 本机局域网 IP",
+        "确认防火墙放行 javaw.exe 与对应端口",
+        "PCL2 内置联机同样基于穿透，可作为零配置替代方案"
+      ],
+      "source": "https://www.openfrp.net/"
+    }
+  ]
+}

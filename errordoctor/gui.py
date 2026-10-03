@@ -357,6 +357,10 @@ class App:
             sev_lbl = tk.Label(row1, text=it["severity_text"], bg=BG, fg=sev,
                                font=FONT_SB)
             sev_lbl.pack(side="left", padx=6)
+            if it.get("kb"):
+                kb_badge = tk.Label(row1, text=" 📚 已知 ", bg=GREEN, fg="#FFFFFF",
+                                    font=FONT_SB)
+                kb_badge.pack(side="left")
             title = tk.Label(body, text=it["title"][:90], bg=BG, fg=FG, font=FONT,
                              anchor="w", justify="left", wraplength=270)
             title.pack(fill="x", pady=(4, 0))
@@ -471,6 +475,44 @@ class App:
 
     # ---- 分析结果分区卡片
 
+    def _render_kb_sections(self, entries):
+        """在分析区顶部渲染离线资料库命中卡片（不清空容器，供调用方组合）。"""
+        self.kb_shown = False
+        if not entries:
+            return
+        self.kb_shown = True
+        head_card = tk.Frame(self.analysis_inner, bg=ACCENT_LIGHT,
+                             highlightthickness=1, highlightbackground=ACCENT)
+        head_card.pack(fill="x", pady=(0, 3))
+        tk.Label(head_card, text="📚 资料库命中（离线匹配，无需联网）",
+                 bg=ACCENT_LIGHT, fg=CODE, font=FONT_B, padx=12,
+                 pady=6, anchor="w").pack(fill="x")
+        for e in entries:
+            card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
+                            highlightbackground=BORDER)
+            card.pack(fill="x", pady=3)
+            head = tk.Frame(card, bg=BG)
+            head.pack(fill="x", padx=12, pady=(8, 0))
+            tk.Label(head, text=f"🧾 {e.get('title', '')}", bg=BG, fg=ACCENT,
+                     font=FONT_B).pack(side="left")
+            tk.Label(head, text=f" {e.get('category', '')} ", bg=BLUE,
+                     fg="#FFFFFF", font=FONT_SB).pack(side="left", padx=8)
+            tk.Label(card, text=e.get("cause", ""), bg=BG, fg=FG, font=FONT,
+                     justify="left", anchor="w", wraplength=600).pack(
+                fill="x", padx=12, pady=(4, 0))
+            for i, s in enumerate(e.get("solution") or [], 1):
+                row = tk.Frame(card, bg=BG)
+                row.pack(fill="x", padx=12, pady=1)
+                tk.Label(row, text=f"{i}.", bg=BG, fg=GREEN, font=FONT_B).pack(
+                    side="left", anchor="n")
+                tk.Label(row, text=s, bg=BG, fg=FG, font=FONT, justify="left",
+                         anchor="w", wraplength=560).pack(side="left", padx=(4, 0))
+            src = e.get("source", "")
+            if src:
+                tk.Label(card, text=f"出处：{src}", bg=BG, fg=DIM, font=FONT_S,
+                         anchor="w", justify="left", wraplength=600).pack(
+                    fill="x", padx=12, pady=(2, 8))
+
     def _analysis_section(self, icon, title, content, fg=FG, content_font=None):
         card = tk.Frame(self.analysis_inner, bg=BG, highlightthickness=1,
                         highlightbackground=BORDER)
@@ -486,6 +528,9 @@ class App:
     def _render_analysis(self, rec):
         for w in self.analysis_inner.winfo_children():
             w.destroy()
+        issue = self._current_issue()
+        if issue is not None:
+            self._render_kb_sections(issue.get("kb"))
         if rec is None:
             return
         if rec.get("error"):
