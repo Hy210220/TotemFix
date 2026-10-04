@@ -1100,7 +1100,7 @@ class App:
             kb_n = engine_mod.knowledge.entry_count()
         except Exception:
             kb_n = "?"
-        tk.Label(w, text=f"🧿 TotemFix v2.4 · 本地运行 · 内置资料库 {kb_n} 条 · DeepSeek 驱动",
+        tk.Label(w, text=f"🧿 TotemFix v2.6.0 · 本地运行 · 内置资料库 {kb_n} 条 · DeepSeek 驱动",
                  bg=BG, fg=DIM, font=FONT_S, anchor="w").pack(fill="x", padx=18, pady=(6, 0))
 
         bar = tk.Frame(w, bg=BG)
