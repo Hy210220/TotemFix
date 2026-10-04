@@ -162,6 +162,14 @@ app._open_settings()
 pump(app, 0.5)
 check("设置窗口打开", app.settings_win is not None and app.settings_win.winfo_exists())
 if app.settings_win:
+    # 底部保存按钮必须可见（低分辨率屏幕回归防护）
+    app.root.update_idletasks()
+    check("保存按钮在窗口内可见",
+          app.btn_save_settings.winfo_viewable() == 1
+          and app.btn_save_settings.winfo_rooty()
+          + app.btn_save_settings.winfo_height()
+          <= app.root.winfo_screenheight())
+if app.settings_win:
     # 候选列表：填充两个 .minecraft 后应显示且可选
     mc2 = os.path.join(TMP, "第二处", ".minecraft")
     os.makedirs(mc2, exist_ok=True)

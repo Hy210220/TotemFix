@@ -70,7 +70,7 @@ MONO_S = ("Consolas", 9)
 def center(win: tk.Toplevel, w: int, h: int):
     win.update_idletasks()
     x = max(0, (win.winfo_screenwidth() - w) // 2)
-    y = max(0, (win.winfo_screenheight() - h) // 3)
+    y = max(0, (win.winfo_screenheight() - h) // 2)
     win.geometry(f"{w}x{h}+{x}+{y}")
 
 
@@ -986,23 +986,37 @@ class App:
         w = tk.Toplevel(self.root, bg=BG)
         w.title("设置")
         w.transient(self.root)
-        center(w, 640, 780)
+        center(w, 640, 640)
         self.settings_win = w
 
+        # ---- 底部按钮栏：固定常显（不随内容滚动，保证低分辨率下可保存）
+        bar = tk.Frame(w, bg=BG)
+        bar.pack(side="bottom", fill="x", padx=18, pady=12)
+        self.btn_save_settings = self._make_button(bar, "💾 保存", self._save_settings,
+                                                   primary=True, big=True)
+        self.btn_save_settings.pack(side="left")
+        self._make_button(bar, "🔌 测试连接", self._test_connection).pack(side="left", padx=8)
+        self._make_button(bar, "退出程序", self._quit, danger=True).pack(side="right")
+
+        # ---- 滚动内容区（设置项多时可用滚轮翻页）
+        canvas, inner, sb = make_scrollable(w, BG)
+        canvas.pack(side="top", fill="both", expand=True, padx=(18, 0))
+        sb.pack(side="right", fill="y", pady=(0, 10))
+
         def section(text):
-            tk.Frame(w, bg=BORDER, height=1).pack(fill="x", padx=18, pady=(10, 0))
-            tk.Label(w, text=text, bg=BG, fg=ACCENT, font=FONT_B).pack(
-                anchor="w", padx=18, pady=(6, 2))
+            tk.Frame(inner, bg=BORDER, height=1).pack(fill="x", padx=2, pady=(10, 0))
+            tk.Label(inner, text=text, bg=BG, fg=ACCENT, font=FONT_B).pack(
+                anchor="w", padx=2, pady=(6, 2))
 
         def row_label(text):
-            tk.Label(w, text=text, bg=BG, fg=DIM, font=FONT_S).pack(
-                anchor="w", padx=18, pady=(6, 2))
+            tk.Label(inner, text=text, bg=BG, fg=DIM, font=FONT_S).pack(
+                anchor="w", padx=2, pady=(6, 2))
 
         def make_entry(value="", show=None):
-            e = tk.Entry(w, bg=LOG_BG, fg=FG, insertbackground=FG, relief="flat",
+            e = tk.Entry(inner, bg=LOG_BG, fg=FG, insertbackground=FG, relief="flat",
                          bd=0, highlightthickness=1, highlightbackground=BORDER,
                          highlightcolor=ACCENT, font=MONO)
-            e.pack(fill="x", padx=18, ipady=6)
+            e.pack(fill="x", padx=2, ipady=6)
             if show:
                 e.config(show=show)
             if value:
@@ -1015,7 +1029,7 @@ class App:
         section("🔍 路径设置")
         row_label("PCL 启动器文件夹（含 PCL.exe / Plain Craft Launcher 2.exe）")
         sv["pcl"] = make_entry(self.cfg.get("pcl_dir", ""))
-        pcl_row = tk.Frame(w, bg=BG)
+        pcl_row = tk.Frame(inner, bg=BG)
         pcl_row.pack(fill="x", padx=18, pady=(6, 0))
         self._make_button(pcl_row, "🔎 自动检测", lambda: self._autodetect("pcl"),
                           tip="从本机定位 PCL 文件夹").pack(side="left")
@@ -1024,7 +1038,7 @@ class App:
 
         row_label("Minecraft 文件夹（.minecraft）")
         sv["mc"] = make_entry(self.cfg.get("mc_dir", ""))
-        mc_btns = tk.Frame(w, bg=BG)
+        mc_btns = tk.Frame(inner, bg=BG)
         mc_btns.pack(fill="x", padx=18, pady=(6, 0))
         self._make_button(mc_btns, "🔎 从 PCL 配置检测",
                           self._detect_mc_fast,
@@ -1035,14 +1049,14 @@ class App:
         self.btn_full_scan.pack(side="left", padx=8)
 
         row_label("检测到的 Minecraft 文件夹（双击选择，附完整路径）：")
-        self.mc_listbox = tk.Listbox(w, bg=PANEL, fg=FG, bd=0, height=6,
+        self.mc_listbox = tk.Listbox(inner, bg=PANEL, fg=FG, bd=0, height=6,
                                      selectbackground=ACCENT_LIGHT,
                                      selectforeground=FG, activestyle="none",
                                      highlightthickness=1, highlightbackground=BORDER,
                                      font=MONO_S)
         self.mc_listbox.pack(fill="x", padx=18)
         self.mc_listbox.bind("<Double-Button-1>", lambda e: self._use_mc_candidate())
-        mc_use = tk.Frame(w, bg=BG)
+        mc_use = tk.Frame(inner, bg=BG)
         mc_use.pack(fill="x", padx=18, pady=(6, 0))
         self._make_button(mc_use, "使用所选", self._use_mc_candidate).pack(side="left")
         tk.Label(mc_use, text="全盘扫描约需 10~60 秒",
@@ -1053,13 +1067,13 @@ class App:
         row_label("API Key（sk-...，仅保存在本机）")
         sv["key"] = make_entry("", show="*")
         if self.cfg.get("api_key"):
-            tk.Label(w, text="（已配置，留空表示保持不变）", bg=BG, fg=DIM,
+            tk.Label(inner, text="（已配置，留空表示保持不变）", bg=BG, fg=DIM,
                      font=FONT_S).pack(anchor="w", padx=18)
         row_label("API 地址（OpenAI 兼容，默认官方）")
         sv["base"] = make_entry(self.cfg.get("api_base", ""))
         row_label("模型")
         sv["model"] = make_entry(self.cfg.get("model", ""))
-        tk.Label(w, text="deepseek-chat（推荐）或 deepseek-reasoner（推理更强）",
+        tk.Label(inner, text="deepseek-chat（推荐）或 deepseek-reasoner（推理更强）",
                  bg=BG, fg=DIM, font=FONT_S).pack(anchor="w", padx=18)
 
         # ---- 行为设置
@@ -1069,23 +1083,23 @@ class App:
         sv["autofix"] = tk.BooleanVar(value=bool(self.cfg.get("autofix", True)))
         sv["hide"] = tk.BooleanVar(value=bool(self.cfg.get("hide_on_close", True)))
         sv["interval"] = tk.StringVar(value=str(self.cfg.get("watch_interval", 3)))
-        tk.Checkbutton(w, text="检测到报错后自动修复（与顶栏“自动修复”开关联动）",
+        tk.Checkbutton(inner, text="检测到报错后自动修复（与顶栏“自动修复”开关联动）",
                        variable=sv["autofix"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
                        highlightthickness=0, bd=0).pack(anchor="w", padx=18, pady=(4, 0))
-        tk.Checkbutton(w, text="修改文件前弹窗确认（弹窗内可勾选“下次不再询问”）",
+        tk.Checkbutton(inner, text="修改文件前弹窗确认（弹窗内可勾选“下次不再询问”）",
                        variable=sv["ask"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
                        highlightthickness=0, bd=0).pack(anchor="w", padx=18)
-        tk.Checkbutton(w, text="发现报错后自动调用 AI 分析",
+        tk.Checkbutton(inner, text="发现报错后自动调用 AI 分析",
                        variable=sv["auto_analyze"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
                        highlightthickness=0, bd=0).pack(anchor="w", padx=18)
-        tk.Checkbutton(w, text="点关闭按钮时最小化后台监控（取消勾选=直接退出）",
+        tk.Checkbutton(inner, text="点关闭按钮时最小化后台监控（取消勾选=直接退出）",
                        variable=sv["hide"], bg=BG, fg=FG,
                        activebackground=BG, selectcolor=BG,
                        highlightthickness=0, bd=0).pack(anchor="w", padx=18)
-        int_row = tk.Frame(w, bg=BG)
+        int_row = tk.Frame(inner, bg=BG)
         int_row.pack(fill="x", padx=18, pady=(4, 0))
         tk.Label(int_row, text="后台监控间隔（秒）：", bg=BG, fg=DIM,
                  font=FONT_S).pack(side="left")
@@ -1095,20 +1109,14 @@ class App:
                    buttonbackground=PANEL2).pack(side="left")
 
         # 关于
-        tk.Frame(w, bg=BORDER, height=1).pack(fill="x", padx=18, pady=(12, 0))
+        tk.Frame(inner, bg=BORDER, height=1).pack(fill="x", padx=18, pady=(12, 0))
         try:
             kb_n = engine_mod.knowledge.entry_count()
         except Exception:
             kb_n = "?"
-        tk.Label(w, text=f"🧿 TotemFix v2.6.0 · 本地运行 · 内置资料库 {kb_n} 条 · DeepSeek 驱动",
+        tk.Label(inner, text=f"🧿 TotemFix v2.6.0 · 本地运行 · 内置资料库 {kb_n} 条 · DeepSeek 驱动",
                  bg=BG, fg=DIM, font=FONT_S, anchor="w").pack(fill="x", padx=18, pady=(6, 0))
 
-        bar = tk.Frame(w, bg=BG)
-        bar.pack(fill="x", padx=18, pady=16)
-        self._make_button(bar, "💾 保存", self._save_settings, primary=True,
-                          big=True).pack(side="left")
-        self._make_button(bar, "🔌 测试连接", self._test_connection).pack(side="left", padx=8)
-        self._make_button(bar, "退出程序", self._quit, danger=True).pack(side="right")
 
         # 打开时预填快速检测结果
         self._fill_mc_list(config.detect_mc_dirs(self.cfg.get("pcl_dir", "")))
