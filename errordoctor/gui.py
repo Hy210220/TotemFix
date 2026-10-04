@@ -74,6 +74,12 @@ def center(win: tk.Toplevel, w: int, h: int):
     win.geometry(f"{w}x{h}+{x}+{y}")
 
 
+def ease_out_cubic(t: float) -> float:
+    """三次缓出（对照 OpenFrp 默认 CubicEase + EaseOut）。"""
+    t = max(0.0, min(1.0, t))
+    return 1 - (1 - t) ** 3
+
+
 class ToolTip:
     """轻量悬浮提示。"""
 
@@ -148,6 +154,7 @@ class App:
         self.chat_content = ""      # 纯文本累积（测试与调试用）
         self._scan_after_id = None
         self._mc_candidates = []    # 设置页候选 .minecraft 列表
+        self._anim_tasks = {}       # 动画任务表：key -> after id
         self._started = time.time()
 
         self._build_root()
@@ -271,7 +278,12 @@ class App:
         colors = {"info": ACCENT, "ok": GREEN, "err": RED, "warn": YELLOW}
         if not hasattr(self, "toast_frame") or not self.toast_frame.winfo_exists():
             self.toast_frame = tk.Frame(self.root, bg=BG)
-            self.toast_frame.place(relx=0.985, rely=0.955, anchor="se")
+            # 首次出现：从右侧滑入（cubic ease-out）
+            self.toast_frame.place(relx=0.985, rely=0.955, anchor="se", x=44)
+            self._animate("toastin", 200,
+                          lambda k: self.toast_frame.place(
+                              relx=0.985, rely=0.955, anchor="se",
+                              x=int(44 * (1 - k))))
         t = tk.Frame(self.toast_frame, bg=BG, highlightthickness=1,
                      highlightbackground=colors.get(kind, ACCENT))
         t.pack(fill="x", pady=3, anchor="e")
@@ -316,6 +328,8 @@ class App:
                 ("💬 AI 问答", "向 DeepSeek 自由提问"),
                 ("🕘 历史与备份", "操作记录与修复备份还原")]):
             self.nav_items[idx] = self._build_nav_item(text, idx, tip)
+        # 全局选中高亮条（place 定位，可做平滑移动动画）
+        self.nav_highlight = tk.Frame(self.nav, bg=ACCENT, width=3)
         self._refresh_nav()
 
         # 底部：设置 + 状态
@@ -352,17 +366,15 @@ class App:
         self._build_chat_tab()
         self._build_history_tab()
 
-        self._show_page(0)
+        self._show_page(0, animate=False)
 
     def _build_nav_item(self, text, idx, tip):
-        """OpenFrp 风格导航项：左侧 3px 蓝色竖条 + 图标文字，选中白底蓝字。"""
+        """OpenFrp 风格导航项：图标文字 + 悬停高亮；选中蓝条由全局高亮条动画表示。"""
         item = tk.Frame(self.nav, bg=PANEL, height=42, cursor="hand2")
         item.pack(fill="x", pady=2)
         item.pack_propagate(False)
-        bar = tk.Frame(item, bg=PANEL, width=3)
-        bar.pack(side="left", fill="y")
         lbl = tk.Label(item, text=text, bg=PANEL, fg=FG, font=FONT,
-                       anchor="w", padx=12)
+                       anchor="w", padx=14)
         lbl.pack(side="left", fill="both", expand=True)
 
         def on_click(_e=None, i=idx):
@@ -379,23 +391,65 @@ class App:
             w.bind("<Leave>", lambda e: hover(False))
         if tip:
             ToolTip(item, tip)
-        return (item, bar, lbl)
+        return (item, lbl)
 
     def _refresh_nav(self):
-        for idx, (item, bar, lbl) in self.nav_items.items():
+        for idx, (item, lbl) in self.nav_items.items():
             sel = idx == self.current_page
             item.config(bg=BG if sel else PANEL)
-            bar.config(bg=ACCENT if sel else PANEL)
             lbl.config(bg=BG if sel else PANEL, fg=ACCENT if sel else FG,
                        font=FONT_B if sel else FONT)
 
-    def _show_page(self, idx):
+    def _move_nav_highlight(self, idx, animate=True):
+        """把选中蓝条平滑移动到目标导航项（OpenFrp 导航反馈）。"""
+        self.root.update_idletasks()
+        try:
+            target_y = self.nav_items[idx][0].winfo_y()
+        except (KeyError, tk.TclError):
+            return
+        h = 42
+
+        def put(y):
+            try:
+                self.nav_highlight.place(x=0, y=int(y), width=3, height=h)
+            except tk.TclError:
+                pass
+
+        if not animate:
+            put(target_y)
+            return
+        try:
+            cur_y = self.nav_highlight.winfo_y()
+        except tk.TclError:
+            cur_y = target_y
+        if abs(cur_y - target_y) < 1:
+            put(target_y)
+            return
+        self._animate("navhl", 200, lambda k: put(cur_y + (target_y - cur_y) * k),
+                      on_done=lambda: put(target_y))
+
+    def _place_forget_safe(self, p):
+        try:
+            p.place_forget()
+        except tk.TclError:
+            pass
+
+    def _show_page(self, idx, animate=True):
         pages = (self.page_detail, self.page_chat, self.page_history)
-        for i, p in enumerate(pages):
-            if i == idx:
-                p.tkraise()
+        target = pages[idx]
+        target.tkraise()
         self.current_page = idx
         self._refresh_nav()
+        self._move_nav_highlight(idx, animate=animate)
+        if animate:
+            # 新页面自右滑入（cubic ease-out，对照 OpenFrp 导航切换）
+            self._animate(
+                f"page{idx}", 220,
+                lambda k: target.place(relx=0, rely=0, relwidth=1, relheight=1,
+                                       x=int(26 * (1 - k))),
+                on_done=lambda: self._place_forget_safe(target))
+        else:
+            self._place_forget_safe(target)
         names = ("报错检测", "AI 问答", "历史与备份")
         if idx < len(names):
             self._set_status(f"当前页面：{names[idx]}")
@@ -974,6 +1028,50 @@ class App:
         try:
             self.status.config(text=text)
         except (tk.TclError, AttributeError):
+            pass
+
+    # ================================================================ 动画引擎
+
+    def _animate(self, key, duration_ms, on_frame, on_done=None):
+        """cubic ease-out 帧动画（after 链，不阻塞事件循环）。
+
+        同 key 的新动画会取消旧动画；on_frame(progress) 接收 0→1 缓动进度。
+        """
+        old = self._anim_tasks.pop(key, None)
+        if old:
+            try:
+                self.root.after_cancel(old)
+            except tk.TclError:
+                pass
+        start = time.time()
+
+        def step():
+            if self._quit_flag:
+                self._anim_tasks.pop(key, None)
+                return
+            t = (time.time() - start) * 1000.0 / max(1, duration_ms)
+            if t >= 1.0:
+                self._anim_tasks.pop(key, None)
+                try:
+                    on_frame(1.0)
+                except tk.TclError:
+                    pass
+                if on_done:
+                    on_done()
+                return
+            try:
+                on_frame(ease_out_cubic(t))
+            except tk.TclError:
+                self._anim_tasks.pop(key, None)
+                return
+            try:
+                self._anim_tasks[key] = self.root.after(15, step)
+            except tk.TclError:
+                pass
+
+        try:
+            self._anim_tasks[key] = self.root.after(15, step)
+        except tk.TclError:
             pass
 
     # ================================================================ 设置弹窗
@@ -1591,6 +1689,13 @@ class App:
         self.root.lift()
         try:
             self.root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        # 唤起淡入（对照 OpenFrp 弹出提醒的 opacity 动画，温和幅度）
+        try:
+            self.root.attributes("-alpha", 0.55)
+            self._animate("winfade", 120,
+                          lambda k: self.root.attributes("-alpha", 0.55 + 0.45 * k))
         except tk.TclError:
             pass
         self._topmost_id = self.root.after(900, self._clear_topmost)

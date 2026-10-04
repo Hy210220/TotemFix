@@ -135,6 +135,11 @@ check("全自动执行（无确认弹窗）", wait_cond(
 
 print("== 场景 3：内嵌 AI 问答 ==")
 app._select_tab(1)
+check("页面切换动画完成（滑入归位）", wait_cond(
+    lambda: not app.page_chat.place_info(), app, 3))
+check("导航高亮条平滑到位", wait_cond(
+    lambda: abs(app.nav_highlight.winfo_y()
+                - app.nav_items[1][0].winfo_y()) < 3, app, 3))
 app.chat_input.insert(0, "怎么装光影？")
 app._send_chat()
 check("AI 问答回复", wait_cond(
