@@ -1,4 +1,4 @@
-# 🧿 TotemFix v2.6.0 —— PCL2 报错检测自动修复工具（DeepSeek 驱动，单文件桌面版）
+# 🧿 TotemFix v1.1.1 —— PCL2 报错检测自动修复工具（DeepSeek 驱动，单文件桌面版）
 
 > 基于社区启动器 **PCL2** 的报错检测处理工具，外接 **DeepSeek** 大模型：
 > **一个 exe 放进 PCL2 文件夹，双击即用**。启动即自动扫描 PCL 与 Minecraft 的报错，
